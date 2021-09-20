@@ -1,0 +1,1 @@
+npx pegjs --cache -o parser.js grammar.pegjs
