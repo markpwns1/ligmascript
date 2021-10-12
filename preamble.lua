@@ -90,18 +90,10 @@ end
 local function panic()
     error("Panicked!", 2)
 end
-local none,some,all
-none = {["bind"]=function()  return none end,["is_none"]=true}
-some = proto({["constructor"]=function(value)  return {["value"]=value} end,["bind"]=function(self,fn)  return maybe((fn(self.value))) end,["is_none"]=false})
-boxed = proto({["constructor"]=function(value)  return {["value"]=value} end,["bind"]=function(self,fn)  return boxed((fn(self.value))) end})
-pass = {["bind"]=function(self,fn)  return fn((nil)) end}
-maybe = function(x)  if ((x==nil) or (x==none)) then return none else if is_subclass(x,some) then return x else return some(x) end end end
-put = function(x)  io.write(x);return pass end
-putln = function(x)  print(x);return pass end
-read = function(x) if x == nil then x = "*line" end return boxed((io.read(x))) end
+local 
 identity = function(x)  return x end
 head = function(a)  return a[1] end
-all = function(a,f)  if (len(a)==0) then return true else return (f(a[1]) and for_all((tail(a)))) end end
-any = function(a,f)  if (len(a)==0) then return false else return (f(a[1]) or any((tail(a)))) end end
+all = function(a,f)  if (len(a)==0) then return true else return (f(a[1]) and for_all(tail(a))) end end
+any = function(a,f)  if (len(a)==0) then return false else return (f(a[1]) or any(tail(a))) end end
 map = function(a,f)  local __t = {} for _, x in pairs(a) do __t[#__t+1] = f(x) end return __t end
 filter = function(a,f)  local __t = {} for _, x in pairs(a) do if (f(a)) then __t[#__t+1] = x end end return __t end

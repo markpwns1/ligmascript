@@ -71,10 +71,9 @@ end
 
 local function extend(__super, __proto) return proto(__proto, __super) end
 
-local function head(a) return a[1] end
-local function tail(a) return {select(2,unpack(a))} end
-local function last(a) return a[#a-1] end
-local function body(a) local b = {} for i=1,#a-1 do b[i]=a[i] end end
+local function tail(a)
+    return { select(2, unpack(a)) }
+end
 
 local function pairs(t)
     local keyset = {}
@@ -91,6 +90,6 @@ end
 local function panic()
     error("Panicked!", 2)
 end
-local f,g
-f = function(b,a)  return b end
-g = function(_)  return f({["x"]=6},"abc") end
+local serialise_table
+require("preamble");serialise_table = function(t)  do local serialise_table_kv;serialise_table_kv = function(kv)  do local n;n = len(kv);if (n==0) then return "" elseif (n==1) then do local k,v,__a;__a = head(kv);k = __a[1] v = __a[2] ;return string.format("%s: %s",serialise(k),serialise(v)) end else do local k,v,__a;__a = head(kv);k = __a[1] v = __a[2] ;return string.format("%s: %s, %s",serialise(k),serialise(v),serialise_table_kv(tail(kv))) end end end end;return string.format("{ %s }",serialise_table_kv(pairs(t))) end end
+serialise = function(x)  do local T;T = type(x);if (T=="nil") then return "nil" elseif (T=="number") then return tostring(x) elseif (T=="string") then return string.format("\"%s\"",x) elseif (T=="boolean") then return tostring(x) elseif (T=="function") then return "function" elseif (T=="CFunction") then return "cfunction" elseif (T=="userdata") then return "userdata" elseif (T=="table") then return serialise_table(x) else return panic((nil)) end end end

@@ -1,0 +1,261 @@
+
+
+1. CALLING FUNCTIONS 
+Functions are called like so:
+
+input()
+print(x)
+f(x, y)
+
+2. PRINTING AND MATH
+You can evaluate statements 
+print(5)
+print(5 + 6)
+print(4*5/3)
+print   (  4 *5/    3 )
+PrInT(5) # wrong
+
+3. COMMENTS
+# This is a comment
+
+4. TEXT (STRINGS)
+
+print("1. Hello world")
+print("2. Goodbye world")
+print("3. Hel" + "lo " + "wor" + "ld")
+print("4. " + "Hello world" * 3)
+
+5. COMBINING STUFF
+
+print("Five plus six equals " + (5 + 6)) # wrong!
+print("Five plus six equals " + str(5 + 6))
+
+print(5 + "6") # wrong!
+print(5 + int("6"))
+
+print(5 + int("6.45")) # wrong!
+print(5 + float("6.45"))
+
+6. VARIABLES
+
+x = 1 + 2
+print(x)
+
+x = "Hello world"
+print(x)
+
+x = 1
+y = 2
+print(x + y * 5)
+
+x = 1
+y = 2
+z = "one plus two equals " + str(x + y)
+print(z)
+
+x = 1
+y = 2
+z = "one plus two equals "
+print(z + str(x + y))
+
+you_can_call_variables_whatever_you_want = "abc123"
+print(you_can_call_variables_whatever_you_want)
+
+7. INPUT
+
+x = input()
+print(x)
+
+p = "What is your name? "
+name = input(p)
+print("Hello, " + name  + "!")
+
+print("Enter two numbers and I will add them.")
+first = input("The first number: ")
+second = input("The second number: ")
+result = float(first) + float(second)
+print(first + " plus " + second + " is " + str(result))
+
+8. BOOLEANS
+
+x = True
+y = False
+print(x)
+print(y)
+
+print(1 < 2)
+print(1 > 2)
+print(1 >= 1)
+print("ABC" == "123")
+print("ABC" == "ABC")
+
+x = "ABC123"
+y = x == ("ABC" + "123")
+print(y)
+
+name = input("What is your name? ")
+print(name == "Mark")
+
+9. IF STATEMENTS
+
+x = 1 + 3
+
+if x == 1:
+  print("x is 1")
+elif x < 1:
+  print("x is less than 1")
+else:
+  print("x greater than 1")
+
+x = 1 + 3
+y = 5
+if x == 1:
+  print("x is 1")
+elif x < 1:
+  print("x is less than 1")
+else:
+  print("x greater than 1")
+
+  if y > 0:
+    print("and y is greater than zero")
+
+10. INTERACTIVITY
+
+print("You wake up in Brazil. What do you do?")
+print("1. Leave")
+print("2. Cry")
+
+action = input(" > ")
+
+if action == "1":
+  print("You cannot leave Brazil.")
+elif action == "2":
+  print("You cry.")
+else:
+  print("You cannot follow instructions")  
+
+
+age = int(input("How old are you? "))
+
+if age > 17:
+  what_to_call_him = "Adult"
+else:
+  what_to_call_him = "Minor"
+
+print("You're a(n): " + what_to_call_him)
+
+12. LOOPS
+
+print("You are on a long road. Keep walking? (y/n)")
+action = input(" > ")
+
+while action == "y":
+  print("You walk for a few hours. It seems like you're no closer to your destination. Keep walking? (y/n)")
+  action = input(" > ")
+
+print("You stop walking and realise that the real treasure was the friends you made along the way.")
+
+x = 1
+while x < 10:
+  print(x)
+  x = x + 1
+
+13. TRY-EXCEPT
+
+try:
+  age = int(input("How old are you? "))
+
+  if age > 17:
+    what_to_call_him = "Adult"
+  else:
+    what_to_call_him = "Minor"
+
+  print("You're a(n): " + what_to_call_him)
+except:
+  print("That's not a number!")
+
+14. FUNCTIONS
+
+# equivalent to f(x) = x + 1 
+def plus_one(x):
+  return x + 1
+
+def input_integer(text):
+  return int(input(text))
+  
+a = input_integer("give number: ")
+
+print(a + 2)
+
+def riddle(text):
+  print("Here's a riddle for you.")
+  print("Think you can answer it?")
+  return int(input(text))
+  
+a = riddle("What is one plus two? ")
+
+if a == 3:
+  print("Correct. You may pass.")
+else:
+  print("fool")
+
+15. ARRAYS
+
+a = [ "first element", 2, 5 + 6, "Hello world" ]
+
+print(a[0])
+print(a[len(a) - 1])
+
+a.append("new item!")
+print(a[len(a) - 1])
+
+print(a[2])
+a.insert(2, "NEW ITEM!!")
+print(a[2])
+
+16.
+
+import random
+
+x = random.randint(1, 100)
+if x < 50:
+  print("A")
+else:
+  print("B")
+
+player_inventory = [ ]
+
+answer = input("You see a rock. Pick it up? (y/n) ").lower()
+if answer == "y":
+  player_inventory.append("rock")
+
+if len(player_inventory) > 5:
+  print("Your inventory is too full!")
+
+# ... some time later
+print("a monkey attacks you.")
+if "rock" in player_inventory:
+  print("you are to able to defend yourself because you have rock")
+
+
+dialogue = {
+  "initial_text": "You are on a long road. Keep walking? (y/n)",
+  "loop_text": "You walk for a few hours. It seems like you're no closer to your destination. Keep walking? (y/n)",
+  "game_end_text": "You stop walking and realise that the real treasure was the friends you made along the way."
+}
+
+def print_dialogue(dialoge_code):
+  print(dialogue[dialoge_code])
+
+print_dialogue("initial_text")
+action = input(" > ")
+
+while action == "y":
+  print_dialogue("loop_text")
+  action = input(" > ")
+
+print_dialogue("game_end_text")
+
+
+
+

@@ -1,37 +1,63 @@
 
 const fs = require("fs");
-const parser = require("./parser");
+const { Scanner } = require("./scanner");
+const { Parser } = require("./parser-new");
+const types = require("./type");
 
 const INPUT_FILE = process.argv[2];
 const OUTPUT_FILE = process.argv[3] || (INPUT_FILE.substring(0, INPUT_FILE.lastIndexOf(".")) + ".lua");
 
-let preprocess = (original_src) => {
-    let src = "";
-    let i = 0;
-    while(i < original_src.length - 1) {
-        if(original_src[i] == "-" && original_src[i + 1] == "-") {
-            i+= 2;
-            while(original_src[i] != "\n") i++;
-            i++;
-        }
-        else {
-            src += original_src[i];
-            i++;
-        }
-    }
-    return src;
-}
+// let preprocess = (original_src) => {
+//     let src = "";
+//     let i = 0;
+//     while(i < original_src.length - 1) {
+//         if(original_src[i] == "-" && original_src[i + 1] == "-") {
+//             i+= 2;
+//             while(original_src[i] != "\n") i++;
+//             i++;
+//         }
+//         else {
+//             src += original_src[i];
+//             i++;
+//         }
+//     }
+//     return src;
+// }
 
-const src = preprocess(fs.readFileSync(INPUT_FILE, "utf-8"));
-const ast = parser.parse(src);
+// const src = preprocess(fs.readFileSync(INPUT_FILE, "utf-8"));
+// const ast = parser.parse(src);
+
+
 
 const definitions = [ ];
 
 let depth = 0;
 
-const addDefinition = (name) => {
-    if(definitions.includes(name))
-        throw "Cannot define '" + name + "' twice";
+const err = (ast, msg) => {
+    
+    if(ast) {
+        const pos = ast.firstToken.pos;
+        const e = Error("SEMANTIC ERROR @ Ln " + pos.ln + ", col " + pos.col + " -- " + msg);
+        e.type = "semantic";
+        e.rawMessage = msg;
+        e.offset = ast.firstToken.pos.offset;
+        e.pos = pos;
+        e.length = (ast.lastToken.pos.offset - ast.firstToken.pos.offset + ast.lastToken.pos.length);
+        e.offendingAST = ast;
+        return e;
+    }
+    else {
+        const e = Error("SEMANTIC ERROR -- " + msg);
+        e.type = "semantic";
+        e.rawMessage = msg;
+        return e;
+    }
+}
+
+const addDefinition = (ast, name) => {
+    if(definitions.includes(name)) {
+        err(ast, "Cannot declare '" + name + "' more than once.");
+    }
         
     definitions.push(name);
 }
@@ -39,10 +65,10 @@ const addDefinition = (name) => {
 const evaluators = { };
 
 evaluators.simple_def = ast => {
-    let prefix = "local " + ast.name + ";";
+    let prefix = "local " + emitIdentifier(ast.name) + ";";
 
     if(depth == 0) {
-        addDefinition(ast.name);
+        addDefinition(ast, ast.name);
         prefix = "";
     }
     
@@ -50,14 +76,35 @@ evaluators.simple_def = ast => {
 }
 
 evaluators.array_destructure = ast => {
-    let prefix = "local " + ast.names.join(",") + ";";
+    // let prefix = "local " + ast.names.join(",") + ";";
+
+    // if(depth == 0) {
+    //     ast.names.forEach(addDefinition);
+    //     prefix = "";
+    // }
+
+    // return prefix + evalBody(ast.value, true, setVarsReturn(ast.names));
+
+    const allNames = ast.head.concat(ast.tail).concat(["__a"]);
+    let prefix = "local " + allNames.join(",") + ";";
 
     if(depth == 0) {
-        ast.names.forEach(addDefinition);
+        allNames.forEach(x => addDefinition(ast, x));
         prefix = "";
     }
 
-    return prefix + evalBody(ast.value, true, setVarsReturn(ast.names));
+    let txt = prefix + evalBody(ast.value, true, setVarReturn("__a")) + ";";
+    for (let i = 0; i < ast.head.length; i++) {
+        const name = ast.head[i];
+        txt += name + " = __a[" + (i + 1) + "] "
+    }
+
+    for (let i = 0; i < ast.tail.length; i++) {
+        const name = ast.tail[i];
+        txt += name + " = __a[#__a - " + (ast.tail.length - i - 1) + "] "
+    }
+
+    return txt;
     // return prefix + ast.names.join(",") + " = unpack(" + evaluate(ast.value) + ")";
 }
 
@@ -65,7 +112,7 @@ evaluators.table_destructure = ast => {
     let prefix = "local " + ast.pairs.map(x => x.name).join(",") + ";";
 
     if(depth == 0) {
-        ast.pairs.map(x => x.name).forEach(addDefinition);
+        ast.pairs.map(x => x.name).forEach(x => addDefinition(ast, x));
         prefix = "";
     }
 
@@ -75,8 +122,8 @@ evaluators.table_destructure = ast => {
 const SPECIALS = [ "when_expr", "do_expr", "let_in_expr", "try_expr", "array_comprehension" ]
 
 const defaultReturn = content => "return " + content;
-const setVarReturn = v => content => v + " = " + content;
-const setVarsReturn = v => content => v.join(",") + " = unpack(" + content + ")";
+const setVarReturn = v => content => emitIdentifier(v) + " = " + content;
+const setVarsReturn = v => content => v.map(x => emitIdentifier(x)).join(",") + " = unpack(" + content + ")";
 
 const evalBody = (ast, simplify, returnPrefix = defaultReturn) => {
     ast = getInnerAST(ast);
@@ -122,19 +169,26 @@ evaluators.let_in_expr = (ast, simplify, returnPrefix) => {
     return simplify? ("do " + inner + " end") : ("(function() " + inner + " end)()");
 }
 
-evaluators.array_comprehension = (ast, simplify, returnPrefix) => body(simplify, "local __t = {} for _, " + ast.iter_var + " in pairs(" + evaluate(ast.collection) + ") do " + (ast.filters.length > 0? ("if " + ast.filters.map(x => "(" + evaluate(x) + ")").join(" and ") + " then " + evalBody(ast.expression, simplify, setVarReturn("__t[#__t+1]")) + " end") : (evalBody(ast.expression, simplify, setVarReturn("__t[#__t+1]")))) + " end " + returnPrefix("__t"))
+evaluators.array_comprehension = (ast, simplify, returnPrefix = defaultReturn) => body(simplify, "local __t = {} for _, " + ast.iter_var + " in pairs(" + evaluate(ast.collection) + ") do " + (ast.filters.length > 0? ("if " + ast.filters.map(x => "(" + evaluate(x) + ")").join(" and ") + " then " + evalBody(ast.expression, simplify, setVarReturn("__t[#__t+1]")) + " end") : (evalBody(ast.expression, simplify, setVarReturn("__t[#__t+1]")))) + " end " + returnPrefix("__t"))
 
-evaluators.property = ast => evaluate(ast.table) + "." + ast.name;
+evaluators.property = ast => evaluate(ast.table) + "." + emitIdentifier(ast.name);
 evaluators.index = ast => evaluate(ast.table) + "[" + evaluate(ast.index) + "]";
 
 evaluators.function = ast => {
 
-    let txt = "function(" + ast.parameters.map(x => x.name).join(",") + ") ";
+    let txt = "function(" + ast.parameters.map(x => x.variadic? "..." : x.name).join(",") + ") ";
 
     depth++;
 
-    txt += ast.parameters.filter(x => x.defaultValue).map(x => "if " + x.name + " == nil then " + x.name + " = " + evaluate(x.defaultValue) + " end").join(" ")
-    + " " + evalBody(ast.result, true) + " end"
+    // console.log(ast.parameters);
+    const last = ast.parameters[ast.parameters.length - 1];
+    if(ast.parameters.length > 0 && last.variadic) {
+        txt += "local " + last.name + " = {...} "
+    };
+
+    txt += ast.parameters.filter(x => x.defaultValue).map(
+        x => (x.variadic? ("if #" + x.name + " == 0 then ") : ("if " + x.name + " == nil then ")) + x.name + " = " + evaluate(x.defaultValue) + " end").join(" ")
+        + " " + evalBody(ast.result, true) + " end"
 
     depth--;
 
@@ -159,23 +213,47 @@ const UNOP_REPLACE_TABLE = {
     "...": "unpack"
 }
 
+const RESERVED_LUA_KEYWORDS = [
+    "for",
+    "if",
+    "end",
+    "while",
+    "and",
+    "repeat",
+    "break",
+    "local",
+    "return",
+    "function",
+    "not",
+    "elseif",
+    "until"
+];
+
+
+
+function emitIdentifier(name) {
+    return RESERVED_LUA_KEYWORDS.includes(name)? ("__" + name) : name;
+}
+
 evaluators.unary = ast => (UNOP_REPLACE_TABLE[ast.op] || ast.op) + "(" + evaluate(ast.right) + ")"
 
 evaluators.nil = () => "(nil)";
 evaluators.number = ast => ast.value.toString();
 evaluators.boolean = ast => ast.value.toString();
-evaluators.variable = ast => ast.name;
+evaluators.variable = ast => emitIdentifier(ast.name);
 evaluators.string = ast => "\"" + ast.value + "\"";
 evaluators.fstring = ast => "string.format(\"" + ast.value + "\"," + ast.format_values.map(x => evaluate(x)).join(",") + ")";
 evaluators.parenthesised = ast => "(" + evaluate(ast.inner) + ")";
-evaluators.array = ast => "{" + ast.items.map(x => evaluate(x)).join(",") + "}";
+evaluators.array = ast => "{" + ast.elements.map(x => evaluate(x)).join(",") + "}";
 evaluators.table = ast => "{" + ast.elements.map(x => "[" + evaluate(x.index) + "]=" + evaluate(x.value)).join(",") + "}";
 
-evaluators.method_call = ast => evaluate(ast.table) + ":" + ast.name + "(" + ast.args.map(x => evaluate(x)).join(",") + ")";
+evaluators.method_call = ast => evaluate(ast.table) + ":" + emitIdentifier(ast.name) + "(" + ast.args.map(x => evaluate(x)).join(",") + ")";
 
 evaluators.application = ast => evaluate(ast.f) + "(" + ast.args.map(x => evaluate(x)).join(",") + ")";
 
 evaluators.bind = ast => "(" + evaluate(ast.left) + "):bind(" + evaluate(ast.right) + ")";
+
+evaluators.type_annotation = ast => evaluate(ast.expression);
 
 function evaluate(ast, ...settings) {
     if(!ast) throw "Attempt to evaluate nothing: " + JSON.stringify(ast, null, 2);
@@ -259,9 +337,10 @@ end
 
 local function extend(__super, __proto) return proto(__proto, __super) end
 
-local function tail(a)
-    return { select(2, unpack(a)) }
-end
+local function head(a) return a[1] end
+local function tail(a) return {select(2,unpack(a))} end
+local function last(a) return a[#a-1] end
+local function body(a) local b = {} for i=1,#a-1 do b[i]=a[i] end end
 
 local function pairs(t)
     local keyset = {}
@@ -280,24 +359,102 @@ local function panic()
 end
 `;
 
-txt = "";
+const compile = (inputFile, outputFile) => {
+    
+    const source = fs.readFileSync(inputFile, "utf-8");
+    const scanner = new Scanner().scan(source);
+    const parser = new Parser(scanner.tokens);
+    ast = parser.program();
+    
+    let errors = ast.errors;
 
-for (const im of ast.imports) {
-    txt += "require(\"" + im + "\");"
+    errors = [ ...errors, ...types.typecheck(ast.definitions) ];
+
+    // console.log(JSON.stringify(types.scopes, null, 2));
+
+    txt = "";
+
+    const tryDo = f => {
+        try {
+            return f();
+        }
+        catch (e) {
+            errors.push(e);
+        }
+    }
+
+    for (const im of ast.imports) {
+        tryDo(() => txt += "require(" + evaluate(im) + ");");
+    }
+
+    for (const dec of ast.definitions) {
+        tryDo(() => txt += evaluate(dec) + "\n");
+    }
+
+    if(definitions.includes("main"))
+        txt += "\nmain()";
+
+    if(definitions.length > 0)
+        txt = ("local " + definitions.filter(x => !ast.export.includes(x)).map(x => emitIdentifier(x)).join(",") + "\n") + txt;
+
+    for (const ex of ast.export) {
+        if(!definitions.includes(ex)) {
+            errors.push(err(null, "Attempt to export variable '" + ex + "' that has not been defined."));
+        }
+    }
+
+    txt = preamble + txt;
+
+    if(errors.length > 0) {
+        const lines = source.split("\n");
+        console.log(errors.length + " ERRORS:");
+
+        let i = 0;
+        for (const err of errors) {
+            try {
+                if(err.type) {
+                    if(err.pos) {
+                        const pos = err.pos;
+                        const length = err.length || err.pos.length || 1;
+            
+                        let text = (++i) + ". ";
+                        text += err.message;
+                        text += "\n     | \n";
+                        text += pos.ln.toString().padStart(4) + " | " + lines[pos.ln - 1] + "\n";
+                        
+                        text += "     | ";
+                        for (let i = 0; i < pos.col - 1; i++) {
+                            text += " ";
+                        }
+                        for (let i = 0; i < length; i++) {
+                            text += "^"
+                        }
+                        text += "";
+            
+                        console.log(text);
+                    }
+                    else {
+                        console.log((++i) + ". " + (err.message || err));
+                    }
+                }
+                else {
+                    console.log((++i) + ". " + (err.stack || err));
+                }
+            }
+            catch {
+                console.log("There was an error displaying this error. Here is an uglier version of the error:");
+                console.log(err);
+            }
+        }
+        return;
+    }
+
+    types.dump();
+    // console.log(JSON.stringify(types.scopes, null, 2));
+    // console.log(txt);
+
+    fs.writeFileSync(outputFile, txt);
 }
 
-for (const dec of ast.definitions) {
-    txt += evaluate(dec) + "\n";
-}
+compile(INPUT_FILE, OUTPUT_FILE);
 
-if(definitions.includes("main"))
-    txt += "\nmain()";
-
-if(definitions.length > 0)
-    txt = ("local " + definitions.filter(x => !ast.export.includes(x)).join(",") + "\n") + txt;
-
-txt = preamble + txt;
-
-console.log(txt);
-
-fs.writeFileSync(OUTPUT_FILE, txt);

@@ -1,17 +1,21 @@
 
-import "preamble"
+
+
+
+-- import "preamble"
 
 -- let vec2 = proto {
 --     .constructor = \x, y -> { .x, .y };
 --     .to_string = \. => "${self.x}, ${self.y}";
 -- }
 
+-- let proto = $ 
+
 -- let vec3 = extend vec2 {
 --     .constructor = \x, y, z -> table.merge (vec2.constructor x y) { .z };
 --     .to_string = \. => "${vec2.to_string self}, ${self.z}"
 -- }
 
--- let txt = "Hello world"
 -- let A = proto { 
 --     .hello = \. -> "Hello A"
 -- }
@@ -20,57 +24,120 @@ import "preamble"
 --     .hello = \. -> "Hello B"
 -- }
 
+-- let main = \. -> print ((B!):hello!)
+
+-- import "yea"
+
+-- import asdf
+
+-- import "hey"
+
+-- let a b = 4
+
+-- let c = 5
+-- let c = 6
+
 -- let main = \. -> maybe blyad >> print
 
 -- old way of doing IO
-let main = \. -> 
-    do putln "What is your name?" then
-    do put " > " then
-    let x = io.read "*line" in 
-    print "Hello, ${x}"
+-- let main = \. -> 
+--     do putln "What is your name?" then
+--     do put " > " then
+--     let x = io.read "*line" in 
+--     print "Hello, ${x}"
 
+-- -- IO monads
+-- let main = \. -> sequence_of
+--     >> putln "What is your name?"
+--     >> put " > "
+--     >> read!
+--     >> \name -> put "Hello, ${name}!"
 
+-- -- prints 1
+-- let contrived_example = 
+--     let a = [ 1, 2, 3 ] in
+--     (maybe a) >> head >> print
 
--- IO monads
-let main = \. -> sequence_of
-    >> putln "What is your name?"
-    >> put " > "
-    >> read!
-    >> \name -> put "Hello, ${name}!"
-
--- prints 1
-let contrived_example = 
-    let a = [ 1, 2, 3 ] in
-    (maybe a) >> head >> print
-
+-- let a = let b = 2 in print b
 
 -- let main = \. -> (maybe a) >> head >> print 
--- let serialise_table = \t -> 
---     let serialise_table_kv = \kv ->
---         let n = len kv in cases
---             | n == 0, ""
---             | n == 1, let [ k, v ] = head kv in 
---                 "${serialise k}: ${serialise v}"
---             | else, let [ k, v ] = head kv in 
---                 "${serialise k}: ${serialise v}, ${serialise_table_kv (tail kv)}"
---     in "{ ${serialise_table_kv (pairs t)} }"
 
--- let serialise = \x -> 
---     let T = type x in cases
---         | T == "nil", "nil"
---         | T == "number", tostring x
---         | T == "string", "\"${x}\""
---         | T == "boolean", tostring x
---         | T == "function", "function"
---         | T == "CFunction", "cfunction"
---         | T == "userdata", "userdata"
---         | T == "table", serialise_table x
---         | else, panic!
+-- let ident = $ [T] -> T :: \a -> a
+-- let make_getter = $ T -> (() -> T) :: \a -> \. -> a
+-- let five_getter = make_getter 5
+-- let five = five_getter!
 
--- let t = { .x = [ 4, 5 ] }
 
--- -- prints { "x": { 1: 4, 2: 5 } }
--- let main = \. -> print (serialise t)
+-- let print_num = $ num :: \n -> print n
+-- let main = \. -> first [ 1, 2, 3 ]
+
+-- let head = $ [T] -> T :: \a -> a #1
+-- foreign head :: [T] -> T
+-- foreign 
+
+-- let f = \x -> x
+-- let g = \x... -> x
+
+-- lua FFI
+-- foreign print :: any -> ()
+
+-- let overwrite = $ A >= B >= {}, B -> A :: \a, b -> a
+
+-- let double_x = $ (T >= { x :: num }) -> T :: \a -> a
+
+-- type None :: { }
+
+
+let none = $ { bind :: }:: {
+    .bind = \. -> none;
+    .is_none = true;
+}
+
+let some = proto {
+    .constructor = \value -> { .value };
+    .bind = \fn => maybe (fn self.value);
+    .is_none = false;
+}
+
+-- let f = $ B >= { x :: A }, A -> B :: \b, a -> b
+-- let g = \. -> f { .x = 6 } "abc" 
+
+-- let e = f { .x = 4 ; .y = 5 }
+
+-- returns the sum of an array of numbers
+-- let add_all = $ num... -> num :: \a... -> cases
+--     | len a < 1, 0
+--     | else, head a + add_all (...tail a)
+
+-- -- entry point
+-- let main = \. -> ($ any -> () :: print) (add_all 1 2 3)
+
+-- let f = $ ([T] -> ()) -> [T] :: \a -> \. -> a
+-- let x = f [ 1, 2, 3 ]
+
+-- let add_three = get_add 3
+-- let five = add_three 2
+-- let main = \. -> print five
+
+-- import "serialise"
+
+-- -- foreign print :: $ ... -> nil
+
+-- -- let for = \initial, cond, next -> 
+-- --     let c = cond initial in cases
+-- --         | c, for (next initial) cond next
+-- --         | else, ()
+
+-- let print_all = \a... -> cases
+--         | len a < 1, ()
+--         | else, 
+--             do print (head a) then 
+--             print_all (tail a)
+
+-- -- -- prints { "x": { 1: 4, 2: 5 } }
+-- -- -- let main = \. -> for 0 (\i -> i < 10) (\i -> do print i then i + 1)
+
+-- let main = \. -> print_all !
 
 
 -- -- a prototype of a 2D vector
