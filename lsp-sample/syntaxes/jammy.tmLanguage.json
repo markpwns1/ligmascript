@@ -1,0 +1,278 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "jammy",
+	"patterns": [
+		{
+			"include": "#scope"
+		}
+	],
+	"repository": {
+		"scope": {
+			"patterns": [
+				{
+					"include": "#letstmt"
+				},
+				{
+					"include": "#keywords"
+				},
+				{
+					"include": "#selftype"
+				},
+				{
+					"include": "#functypes"
+				},
+				{
+					"include": "#classdef"
+				},
+				{
+					"include": "#funccall_excl"
+				},
+				{
+					"include": "#funccall"
+				},
+				{
+					"include": "#members"
+				},
+				{
+					"include": "#self"
+				},
+				{
+					"include": "#strings"
+				},
+				{
+					"include": "#constants"
+				},
+				{
+					"include": "#comment block"
+				},
+				{
+					"include": "#comment"
+				},
+				{
+					"include": "#funcs"
+				},
+				{
+					"include": "#numbers"
+				},
+				{
+					"include": "#objindex"
+				},
+				{
+					"include": "#arrayindex"
+				}
+			]
+		},
+		"coolfunccall": {
+			"match": "([_a-zA-Z][_a-zA-Z0-9]*)\\s*[^\\s]+",
+			"captures": {
+				"1": {
+					"name": "entity.name.function"
+				}
+			}
+		},
+		"classdef": {
+			"match": "(prototype)\\s*([_a-zA-Z][_a-zA-Z0-9]*)\\s*((from)\\s*([_a-zA-Z][_a-zA-Z0-9]*))?",
+			"captures": {
+				"1": {
+					"name": "keyword.control"
+				},
+				"2": {
+					"name": "support.class"
+				},
+				"4": {
+					"name": "keyword.control"
+				},
+				"5": {
+					"name": "support.class"
+				}
+			}
+		},
+		"functypes": {
+			"match": "([_a-zA-Z][_a-zA-Z0-9]*)\\s*:\\s*([_a-zA-Z][_a-zA-Z0-9]*)\\s*(\\=\\>|\\=|\\,|\\)|:=>|(\\[[_a-zA-Z][_a-zA-Z0-9]*\\]))",
+			"captures": {
+				"1": {
+					"name": "variable.parameter"
+				},
+				"2": {
+					"name": "support.class"
+				},
+				"3": {
+					"name": "keyword.other"
+				},
+				"4": {
+					"name": "keyword.other"
+				}
+			}
+		},
+		"selftype": {
+			"match": "\\[([_a-zA-Z][_a-zA-Z0-9]*)\\]\\s*(:=>)",
+			"captures": {
+				"1": {
+					"name": "support.class"
+				},
+				"2": {
+					"name": "keyword.other"
+				}
+			}
+		},
+		"members": {
+			"match": "(@)([a-zA-Z_][a-zA-Z0-9_]*)",
+			"name": "variable.other.constant"
+		},
+		"self": {
+			"match": "@",
+			"name": "variable.other.constant"
+		},
+		"stringformat": {
+			"begin": "(\\$\\{)",
+			"end": "(})",
+			"beginCaptures": {
+				"1": {
+					"name": "keyword.other"
+				}
+			},
+			"endCaptures": {
+				"1": {
+					"name": "keyword.other"
+				}
+			},
+			"patterns": [
+				{
+					"include": "#scope"
+				}
+			]
+		},
+		"funccall_excl": {
+			"match": "(\\.)?([a-zA-Z_][a-zA-Z0-9_]*)\\s*(\\!)",
+			"captures": {
+				"2": {
+					"name": "entity.name.function"
+				}
+			}
+		},
+		"funccall": {
+			"begin": "(\\.)?([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+			"end": "\\)",
+			"beginCaptures": {
+				"2": {
+					"name": "entity.name.function"
+				}
+			},
+			"patterns": [
+				{
+					"include": "#scope"
+				}
+			]
+		},
+		"letstmt": {
+			"begin": "(let)\\s([a-zA-Z_][a-zA-Z0-9_]*)",
+			"end": "=|;",
+			"beginCaptures": {
+				"1": {
+					"name": "keyword.other"
+				},
+				"2": {
+					"name": "variable.parameter"
+				}
+			},
+			"patterns": [
+				{
+					"include": "#funcarg"
+				}
+			]
+		},
+		"funcargs": {
+			"begin": "\\(([a-zA-Z_][a-zA-Z0-9_]*)\\s*",
+			"end": "\\)",
+			"beginCaptures": {
+				"1": {
+					"name": "variable.parameter"
+				}
+			},
+			"patterns": [
+				{
+					"include": "#funcarg"
+				},
+				{
+					"include": "#scope"
+				}
+			]
+		},
+		"funcarg": {
+			"match": "[a-zA-Z_][a-zA-Z0-9_]*",
+			"name": "variable.parameter"
+		},
+		"objindex": {
+			"match": "\\.([a-zA-Z_][a-zA-Z0-9_]*)",
+			"captures": {
+				"1": {
+					"name": "variable.parameter"
+				}
+			}
+		},
+		"arrayindex": {
+			"match": "(#)([a-zA-Z_][a-zA-Z0-9_]*)",
+			"name": "variable.parameter"
+		},
+		"numbers": {
+			"name": "constant.numeric",
+			"match": "[0-9]+(\\.[0-9]+)?"
+		},
+		"keywords": {
+			"name": "keyword.control.jammy",
+			"match": "\\b(end|then|do|export|if|while|for|in|return|with|else|try|match|break|continue|use|len|print)\\b"
+		},
+		"constants": {
+			"name": "keyword.other.jammy",
+			"match": "(\\b(true|false|let|set|self|nil|@|super)\\b)|->|=>"
+		},
+		"strings": {
+			"begin": "(\")",
+			"end": "(\")",
+			"beginCaptures": {
+				"1": {
+					"name": "string.quoted.double.jammy"
+				}
+			},
+			"endCaptures": {
+				"1": {
+					"name": "string.quoted.double.jammy"
+				}
+			},
+			"patterns": [
+				{
+					"include": "#stringformat"
+				},
+				{
+					"name": "constant.character.escape.jammy",
+					"match": "\\\\."
+				},
+				{
+					"name": "string.quoted.double.jammy",
+					"match": "."
+				}
+			]
+		},
+		"comment block": {
+			"name": "comment.block.jammy",
+			"begin": "\\-\\-\\[",
+			"end": "\\]",
+			"patterns": [
+				{
+					"include": "#comment block"
+				},
+				{
+					"begin": "\\[",
+					"end": "\\]",
+					"name": "comment.block.jammy"
+				}
+			]
+		},
+		"comment": {
+			"name": "comment.line.double-slash.jammy",
+			"begin": "\\-\\-",
+			"end": "\n"
+		}
+	},
+	"scopeName": "source.jammy"
+}

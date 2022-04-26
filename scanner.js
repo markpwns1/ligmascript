@@ -8,8 +8,8 @@ const KEYWORDS = data.KEYWORDS;
 const WHITESPACE_REGEX = /\s/;
 const SYMBOL_REGEX = /[`!@#$%^&*()+\-=\[\]{};':\\|,.<>\/?~]/;
 const DIGIT_REGEX = /[0-9]/;
-const IDENTIFIER_PREFIX_REGEX = /[_a-zA-Z]/;
-const IDENTIFIER_CHAR_REGEX = /[_a-zA-Z0-9]/;
+const IDENTIFIER_PREFIX_REGEX = /['_a-zA-Z]/;
+const IDENTIFIER_CHAR_REGEX = /['_a-zA-Z0-9]/;
 
 const STRING_ESCAPES = [
     '"',
@@ -36,7 +36,7 @@ exports.Scanner = class Scanner {
 
     scan(str) {
         this.offset = 0;
-        this.source = str.replace(/\r\n/g, "\n");
+        this.source = str;//.replace(/\r\n/g, "\n");
     
         let tokens = [ ];
     
@@ -134,6 +134,15 @@ exports.Scanner = class Scanner {
                 while(this.offset < this.source.length && this.peek() != "\n") this.eat();
                 return;
             }
+        }
+
+        if(c == "@" && this.isIdentifierPrefix(this.peek(1))) {
+            this.eat();
+            const name = this.identifier();
+            return this.token("selfindex", { 
+                value: name.value,
+                friendlyName: "@" + name
+            });
         }
     
         if(this.isSymbol(c)) {
@@ -259,8 +268,11 @@ exports.Scanner = class Scanner {
 
     identifier() {
         let val = this.eat();
-        while(this.isIdentifierCharacter(this.peek())) {
-            val += this.eat();
+        let c;
+        while(this.isIdentifierCharacter(c = this.peek())) {
+            this.eat();
+            if(c == "'") c = "_p"
+            val += c;
         }
     
         if(KEYWORDS.includes(val)) return this.token("keyword", {

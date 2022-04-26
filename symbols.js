@@ -1,6 +1,7 @@
 const SYMBOLS = {
     "...": "ellipses",
     "::": "square",
+    "?.": "nullco",
     "~=": "neq",
     "==": "eq",
     ">=": "geq",
@@ -56,7 +57,10 @@ const KEYWORDS = [
     "true",
     "false",
     "nil",
-    "foreign"
+    "foreign",
+    "if",
+    "end",
+    "set"
 ]
 
 exports.SYMBOLS = SYMBOLS;

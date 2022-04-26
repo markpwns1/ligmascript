@@ -1,7 +1,7 @@
-
+local __filename, __mappings = "C:/Users/Mark/Desktop/my-stuff/Programming/funclang/src.t", {[154]=429,[155]=431,[156]=431,[157]=431,[158]=431,[159]=431,[160]=431,[161]=431,[162]=431,[163]=432,[164]=433,[165]=433,[166]=434,[167]=434,[168]=435,[169]=435,[170]=436,[171]=436,[172]=438,[173]=438,[174]=440,[175]=441,[176]=441,[177]=442,[178]=442,[179]=443,[180]=443,[181]=445,[182]=445}
 local __pairs = pairs
 local unpack = unpack or table.unpack
-local function table_concat(a, b)
+local function concat(a, b)
     local c = { unpack(a) }
     for i=1, #b do
         c[#c+1] = b[i]
@@ -37,8 +37,22 @@ function table.merge(a, b)
 end
 ]]
 
+local unset = {}
+function overwrite(a, b)
+    for k,v in __pairs(b) do 
+        if type(a[k]) == "table" and type(v) == "table" then 
+            overwrite(a[k], v)
+        elseif v == unset then
+            a[k] = nil
+        else
+            a[k] = v 
+        end
+    end
+    return a
+end
+
 function table.merge(a, b)
-    local c = {}
+    local c = setmetatable({}, getmetatable(a))
     for k,v in __pairs(a) do c[k] = v end
     for k,v in __pairs(b) do c[k] = v end
     return c
@@ -71,10 +85,17 @@ end
 
 local function extend(__super, __proto) return proto(__proto, __super) end
 
+--[[
 local function head(a) return a[1] end
 local function tail(a) return {select(2,unpack(a))} end
-local function last(a) return a[#a-1] end
-local function body(a) local b = {} for i=1,#a-1 do b[i]=a[i] end end
+]]
+
+local function last(a) return a[#a] end
+local function body(a) 
+    local b = {} 
+    for i=1,#a-1 do b[i]=a[i] end 
+    return b 
+end
 
 local function pairs(t)
     local keyset = {}
@@ -91,6 +112,71 @@ end
 local function panic()
     error("Panicked!", 2)
 end
-local f,g
-f = function(b,a)  return b end
-g = function(_)  return f({["x"]=6},"abc") end
+
+do 
+    local old_index = getmetatable("").__index
+    getmetatable("").__index = function(str,i) if type(i) == "number" then return string.sub(str,i,i) else return old_index[i] end end
+end
+
+local function identity(...)
+    return ...
+end
+
+local function count(a)
+    local i = 0
+    for k in __pairs(a) do i = i + 1 end
+    return i
+end
+
+local function modify(t, k, v) 
+    if k then t[k] = v end
+    return t
+end
+
+local function dummy() end
+local function __not(x) return not x end
+
+local function __report_error(f)
+    local success, result = pcall(f)
+    if success then return success 
+    else
+        local filename, line, message = result:match('(.-):(%d+): (.+)')
+        -- filename = filename:gsub('\', '/')
+        -- filename = filename:sub(1, filename:find('/[^/]*$')) .. __filename
+        error(string.format("%s:%s: %s", __filename, __mappings[tonumber(line)] or line, message), 0)
+    end
+end
+
+local main = dummy
+
+local main require(
+"serialise");
+main = 
+function()  return 
+
+print(
+
+serialise(
+
+overwrite(
+{[
+"a"]=
+3,[
+"b"]=
+{[
+"c"]=
+4,[
+"d"]=
+5},[
+"c"]=
+"hello"},
+{[
+"a"]=
+"world",[
+"b"]=
+{[
+"c"]=
+69},[
+"c"]=
+unset}))) end 
+__report_error(main)

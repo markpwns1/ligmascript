@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "heya-unify": "^0.2.7",
     "pegjs": "^0.10.0"
   }
 }

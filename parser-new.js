@@ -1,8 +1,7 @@
 
 const { AST } = require("./ast");
 const SYMBOLS = require("./symbols").SYMBOLS;
-const { Scanner } = require("./scanner");
-const types = require("./type");
+// const types = require("./old_type");
 
 const FRIENDLY_NAMES = {
     ...objectFlip(SYMBOLS),
@@ -30,7 +29,7 @@ function ast(type, firstToken, lastToken, props) {
     });
 }
 
-const TRAVERSE_OPERATORS = [ "colon", "dot", "pound" ];
+const TRAVERSE_OPERATORS = [ "colon", "dot", "pound", "nullco" ];
 const UNARY_OPS = [ "minus", "not", "ellipses" ];
 
 class Parser {
@@ -102,6 +101,8 @@ class Parser {
         if(type && t.type != type) {
             throw this.generateError("Expected " + FRIENDLY_NAMES[type] + " but got " + t.friendlyName, t);
         }
+        // if(t.value == "in") 
+        // console.log("AT EIN");
         this.offset++;
         return t;
     }
@@ -110,6 +111,15 @@ class Parser {
         const t = this.peek();
         if(!types.includes(t.type)) {
             throw this.generateError("Expected one of: " + types.slice(0, types.length - 1).map(x => FRIENDLY_NAMES[x]).join("; ") + " or " + FRIENDLY_NAMES[types[types.length - 1]] + ", but got " + t.friendlyName, t);
+        }
+        this.offset++;
+        return t;
+    }
+
+    eatAnyKeyword(...values) {
+        const t = this.peek();
+        if(t.type != "keyword" || !values.includes(t.value)) {
+            throw this.generateError("Expected one of: " + values.slice(0, values.length - 1).join("; ") + " or " + FRIENDLY_NAMES[values[values.length - 1]] + ", but got " + t.friendlyName, t);
         }
         this.offset++;
         return t;
@@ -136,6 +146,7 @@ class Parser {
         if(t.type != "keyword" || t.value != value) {
             throw this.generateError("Expected '" + value + "' but got " + t.friendlyName, t);
         }
+        // if(t.value == "in") console.log("ATE IN");
         this.offset++;
         return t;
     }
@@ -171,7 +182,7 @@ class Parser {
         }
 
         const decs = [ ];
-        while(this.isKeyword("let")) {
+        while(this.isKeyword("let") || this.isKeyword("set")) {
             this.tryDo(errors, () => decs.push(this.declaration()));
         }
 
@@ -221,6 +232,7 @@ class Parser {
         const name = this.identifier();
         this.eat("equals");
         const value = this.expression();
+        // console.log(this.peek());
         return ast("simple_def", begin, value.lastToken, {
             name: name,
             value: value
@@ -290,20 +302,72 @@ class Parser {
         if(this.isKeyword("let")) {
             return this.letIn();
         }
+        else if(this.isKeyword("set")) {
+            return this.assignment();
+        }
         else if(this.isKeyword("do")) {
             return this.do();
         }
         else if(this.isKeyword("cases")) {
             return this.cases();
         }
-        else return this.booleanOp();
+        else if(this.isKeyword("if")) {
+            return this.ifExpr();
+        }
+        else {
+            const t = this.peek();
+            switch(t.type) {
+                case "thin_arrow": {
+                    this.eat();
+                    const body = this.expression();
+                    return ast("function", t, body.lastToken, {
+                        parameters: [ ],
+                        result: body
+                    });
+                }
+    
+                case "arrow": {
+                    this.eat();
+                    const body = this.expression();
+                    return ast("function", t, body.lastToken, {
+                        parameters: [ { name: "self", token: t, variadic: false } ],
+                        result: body
+                    });
+                }
+
+                default: return this.booleanOp();
+            }
+        }
+    }
+
+    ifExpr() {
+        const begin = this.keyword("if");
+        const cond = this.expression();
+        this.keyword("then");
+        const trueBody = this.expression();
+        let falseBody;
+        if(this.peek().type == "keyword" && this.peek().value == "else") {
+            this.keyword("else");
+            falseBody = this.expression();
+        }
+        else {
+            falseBody = ast("nil", trueBody.firstToken, trueBody.lastToken);
+        }
+
+        return ast("when_expr", begin, falseBody.lastToken, {
+            branches: [ {
+                condition: cond,
+                value: trueBody
+            } ],
+            else_value: falseBody
+        }); 
     }
 
     cases() {
         const begin = this.keyword("cases");
 
         const branches = [ ];
-        while(this.peek().type == "union" && this.peek(1).type != "keyword" && this.peek(1).type != "else") {
+        while(this.peek().type == "union" && this.peek(1).type != "keyword" && this.peek(1).value != "else") {
             this.eat();
             const condition = this.expression();
             this.separator();
@@ -328,41 +392,81 @@ class Parser {
 
     do() {
         const begin = this.keyword("do");
-        const first = this.expression();
-        this.keyword("then");
-        const next = this.expression();
+
+        const res = this.listOfKeywordTerminated(this.expression.bind(this), "then", "end");
+        
+        let next;
+        // console.log(this.peek().type);
+        if(res.end.value == "then") {
+            next = this.expression();
+        }
+        else {
+            next = ast("nil", res.end, res.end);
+        }
+
         return ast("do_expr", begin, next.lastToken, {
-            expression: first,
+            expressions: res.elements,
             next: next
         });
     }
 
     letIn() {
         const dec = this.declaration();
-        this.keyword("in");
-        const expr = this.expression();
+        let expr;
+        let hasInBranch;
+        // console.log(this.peek());
+        if(hasInBranch = this.isKeyword("in")) 
+        {
+            // this.eat();
+            this.keyword("in");
+            // console.log(this.peek());
+            expr = this.expression();
+            // hasInBranch = true;
+        }
+        else expr = ast("nil", dec.firstToken, dec.lastToken);
+
         return ast("let_in_expr", dec.firstToken, expr.lastToken, {
             definition: dec,
-            expression: expr
+            expression: expr,
+            hasInBranch: hasInBranch
+        });
+    }
+
+    assignment() {
+        const begin = this.keyword("set");
+        const left = this.traverse(true);
+        this.eat("equals");
+        const right = this.expression();
+        return ast("assignment", begin, right.lastToken, {
+            left: left,
+            right: right
         });
     }
 
     declaration() {
-        const o = this.offset;
-        this.keyword("let");
-        switch(this.peek().type) {
-            case "open_square": {
-                this.offset = o;
-                return this.arrayDestructure();
+        if(this.isKeyword("let")) {
+            const o = this.offset;
+            this.keyword("let");
+            switch(this.peek().type) {
+                case "open_square": {
+                    this.offset = o;
+                    return this.arrayDestructure();
+                }
+                case "open_curly": {
+                    this.offset = o;
+                    return this.tableDestructure();
+                }
+                default: {
+                    this.offset = o;
+                    return this.simpleDefinition();
+                }
             }
-            case "open_curly": {
-                this.offset = o;
-                return this.tableDestructure();
-            }
-            default: {
-                this.offset = o;
-                return this.simpleDefinition();
-            }
+        }
+        else if(this.isKeyword("set")) {
+            return this.assignment();
+        }
+        else {
+            throw this.generateError("Expected a 'let' or 'set' statement, but got " + this.peek().friendlyName, this.peek());
         }
     }
     
@@ -390,64 +494,67 @@ class Parser {
             return this.exponent();
         }
     }
+    
+    // (A ∨ (¬A ∧ B)) ⊢ (A ∨ B)
 
-    exponent = this.generateBinop(this.typeAnnotation.bind(this), "exponent");
+    exponent = this.generateBinop(this.application.bind(this), "exponent");
+    // exponent = this.generateBinop(this.typeAnnotation.bind(this), "exponent");
 
-    typeExpression() {
-        return this.typeFunction();
-    }
+    // typeExpression() {
+    //     return this.typeFunction();
+    // }
 
-    typeFunctionArg() {
-        const t = this.typeTerminal();
-        let variadic = false;
-        let vToken;
-        if(this.peek().type == "ellipses") {
-            vToken = this.eat();
-            variadic = true;
-        }
-        return {
-            type: t,
-            variadic: variadic,
-            vToken: vToken
-        }
-    }
+    // typeFunctionArg() {
+    //     const t = this.typeTerminal();
+    //     let variadic = false;
+    //     let vToken;
+    //     if(this.peek().type == "ellipses") {
+    //         vToken = this.eat();
+    //         variadic = true;
+    //     }
+    //     return {
+    //         type: t,
+    //         variadic: variadic,
+    //         vToken: vToken
+    //     }
+    // }
 
-    typeFunction() {
-        const o = this.offset;
-        this.typeTerminal();
-        const lookAhead = this.peek().type;
-        this.offset = o;
+    // typeFunction() {
+    //     const o = this.offset;
+    //     this.typeTerminal();
+    //     const lookAhead = this.peek().type;
+    //     this.offset = o;
 
-        if(lookAhead == "comma" || lookAhead == "semicolon" || lookAhead == "thin_arrow" || lookAhead == "ellipses") {
+    //     if(lookAhead == "comma" || lookAhead == "semicolon" || lookAhead == "thin_arrow" || lookAhead == "ellipses") {
 
-            const args = this.listOf(this.typeFunctionArg.bind(this), "thin_arrow");
-            for (let i = 0; i < args.elements.length; i++) {
-                if(args.elements[i].variadic && i != args.elements.length - 1)
-                    throw this.generateError("The variadic argument must be the last argument in a function.", args.elements[i].vToken);
-            }
+    //         const args = this.listOf(this.typeFunctionArg.bind(this), "thin_arrow");
+    //         for (let i = 0; i < args.elements.length; i++) {
+    //             if(args.elements[i].variadic && i != args.elements.length - 1)
+    //                 throw this.generateError("The variadic argument must be the last argument in a function.", args.elements[i].vToken);
+    //         }
 
-            const right = this.typeTerminal();
+    //         const right = this.typeTerminal();
 
-            let f = {
-                type: "function",
-                args: args.elements.map(x => x.type),
-                variadic: args.elements.some(x => x.variadic),
-                result: right
-            };
+    //         let f = {
+    //             type: "function",
+    //             args: args.elements.map(x => x.type),
+    //             variadic: args.elements.some(x => x.variadic),
+    //             result: right
+    //         };
 
-            for (let i = 0; i < f.args.length; i++) {
-                // console.log(f);
-                const replacements = types.matchGeneric(f.args[i], f.args[i]);
-                for (const r of replacements) {
-                    f = types.replaceGeneric(f, r.generic, r.bound);
-                }
-            }
+    //         for (let i = 0; i < f.args.length; i++) {
+    //             // console.log(f);
+    //             const replacements = types.matchGeneric(f.args[i], f.args[i]);
+    //             for (const r of replacements) {
+    //                 f = types.replaceGeneric(f, r.generic, r.bound);
+    //             }
+    //         }
 
-            return f;
-        }
-        else return this.typeTerminal();
+    //         return f;
+    //     }
+    //     else return this.typeTerminal();
 
-    }
+    // }
 
     // typeSuperset() {
     //     if(this.peek().type == "identifier") {
@@ -463,77 +570,77 @@ class Parser {
     //     else return this.typeTerminal();
     // }
 
-    typeTable() {
-        this.eat("open_curly");
-        const field = () => {
-            const name = this.identifier();
-            this.eat("square");
-            const type = this.typeTerminal();
-            return {
-                field: name,
-                type: type
-            }
-        }
-        const pairs = this.listOf(field, "close_curly");
-        return types.tableOf(pairs.elements);
-    }
+    // typeTable() {
+    //     this.eat("open_curly");
+    //     const field = () => {
+    //         const name = this.identifier();
+    //         this.eat("square");
+    //         const type = this.typeTerminal();
+    //         return {
+    //             field: name,
+    //             type: type
+    //         }
+    //     }
+    //     const pairs = this.listOf(field, "close_curly");
+    //     return types.tableOf(pairs.elements);
+    // }
 
-    typeTerminal() {
-        const t = this.peek();
-        if(t.type == "unit") {
-            this.eat();
-            return "()";
-        }
-        else if(t.type == "identifier") {
-            this.eat();
-            if(types.PRIMITIVE_TYPES.includes(t.value)) {
-                return t.value
-            }
-            else {
-                let extending;
-                if(this.peek().type == "geq") {
-                    this.eat();
-                    extending = this.typeTable();
-                }
-                return {
-                    type: "generic",
-                    name: t.value,
-                    extending: extending
-                }
-            }
-            // else throw this.generateError("Expected a primitive type but got '" + t.value + "'.", t);
-        }
-        else if(t.type == "open_paren") {
-            this.eat();
-            const inner = this.typeExpression();
-            this.eat("close_paren");
-            return inner;
-        }
-        else if(t.type == "open_square") {
-            this.eat();
-            const inner = this.typeExpression();
-            this.eat("close_square");
-            return types.arrayOf(inner);
-        }
-        else if(t.type == "open_curly") {
-            return this.typeTable();
-        }
-        else throw this.generateError("Expected a type, but got " + (FRIENDLY_NAMES[t.type] || t.type) + ".", t);
-    }
+    // typeTerminal() {
+    //     const t = this.peek();
+    //     if(t.type == "unit") {
+    //         this.eat();
+    //         return "()";
+    //     }
+    //     else if(t.type == "identifier") {
+    //         this.eat();
+    //         if(types.PRIMITIVE_TYPES.includes(t.value)) {
+    //             return t.value
+    //         }
+    //         else {
+    //             let extending;
+    //             if(this.peek().type == "geq") {
+    //                 this.eat();
+    //                 extending = this.typeTable();
+    //             }
+    //             return {
+    //                 type: "generic",
+    //                 name: t.value,
+    //                 extending: extending
+    //             }
+    //         }
+    //         // else throw this.generateError("Expected a primitive type but got '" + t.value + "'.", t);
+    //     }
+    //     else if(t.type == "open_paren") {
+    //         this.eat();
+    //         const inner = this.typeExpression();
+    //         this.eat("close_paren");
+    //         return inner;
+    //     }
+    //     else if(t.type == "open_square") {
+    //         this.eat();
+    //         const inner = this.typeExpression();
+    //         this.eat("close_square");
+    //         return types.arrayOf(inner);
+    //     }
+    //     else if(t.type == "open_curly") {
+    //         return this.typeTable();
+    //     }
+    //     else throw this.generateError("Expected a type, but got " + (FRIENDLY_NAMES[t.type] || t.type) + ".", t);
+    // }
 
-    typeAnnotation() {
-        if(this.peek().type == "dollar") {
-            const begin = this.eat();
-            const type = this.typeExpression();
-            this.eat("square");
-            const right = this.application();
-            return ast("type_annotation", begin, right.lastToken, {
-                annotation: type,
-                expression: right
-            });
-        }
-        else return this.application();
-    }
+    // typeAnnotation() {
+    //     if(this.peek().type == "dollar") {
+    //         const begin = this.eat();
+    //         const type = this.typeExpression();
+    //         this.eat("square");
+    //         const right = this.application();
+    //         return ast("type_annotation", begin, right.lastToken, {
+    //             annotation: type,
+    //             expression: right
+    //         });
+    //     }
+    //     else return this.application();
+    // }
 
     application() {
         if(this.isKeyword("try")) {
@@ -627,7 +734,17 @@ class Parser {
         }
     }
 
-    traverse() {
+    nullCoalesce() {
+        this.eat("nullco");
+        const t = this.eat("identifier");
+        return {
+            type: "nullco",
+            name: t.value,
+            lastToken: t
+        }
+    }
+
+    traverse(lvalue = false) {
         let e = this.terminal();
         const begin = e.firstToken;
         let t = this.peek();
@@ -638,6 +755,7 @@ class Parser {
                 case "dot": { traversal = this.property(); break }
                 case "pound": { traversal = this.index(); break }
                 case "colon": { traversal = this.methodCall(); break }
+                case "nullco": { traversal = this.nullCoalesce(); break }
             }
 
             e = {
@@ -648,12 +766,31 @@ class Parser {
 
             t = this.peek();
         }
+
+        if(e.type == "method_call" && lvalue) {
+            throw this.generateError("A method call cannot be on the left hand side of an equals operation", e.firstToken);
+        }
+
         return e;
     }
 
     terminal() {
         const t = this.peek();
         switch(t.type) {
+
+            case "at": {
+                this.eat();
+                return ast("variable", t, t, { name: "self" });
+            }
+
+            case "selfindex": {
+                this.eat();
+                return ast("property", t, t, { 
+                    table: ast("variable", t, t, { name: "self" }),
+                    name: t.value
+                });
+            }
+
             case "number": {
                 this.eat();
                 return ast("number", t, t, { value: t.value });
@@ -682,7 +819,15 @@ class Parser {
             case "open_square": {
                 const o = this.offset;
                 this.eat();
-                this.expression();
+                
+                if(this.peek().type == "close_square") {
+                    this.offset = o;
+                    return this.array();
+                }
+                else {
+                    this.expression();
+                }
+
                 if(this.peek().type == "union") {
                     this.offset = o;
                     return this.arrayComprehension();
@@ -701,11 +846,16 @@ class Parser {
                 return this.function();
             }
 
-            case "keyword": {
+            case "dollar": {
                 this.eat();
+                return this.expression();
+            }
+
+            case "keyword": {
                 switch(t.value) {
                     case "true":
                     case "false": {
+                        this.eat();
                         return ast("boolean", t, t, { value: t.value == "true" });
                     }
                 }
@@ -761,8 +911,8 @@ class Parser {
             let t = this.peek().type;
             if(t == "dot") {
                 this.eat();
-                this.eatAny("arrow", "thin_arrow");
-                return [ { name: "_", token: t, variadic: false } ];
+                const eaten = this.eatAny("arrow", "thin_arrow");
+                return [ { name: eaten.type == "thin_arrow"? "_" : "self", token: t, variadic: false } ];
             }
             else {
                 while(t != "arrow" && t != "thin_arrow") {
@@ -773,7 +923,7 @@ class Parser {
                         this.eat();
                     }
                     else if(t != "arrow" && t != "thin_arrow") {
-                        throw this.generateError("Expected '->' or '=>' to begin function declaration, but got " + tok.friendlyName);
+                        throw this.generateError("Expected '->' or '=>' to begin function declaration, but got " + tok.friendlyName, tok);
                     }
                     else {
                         if(t == "arrow")
@@ -854,6 +1004,31 @@ class Parser {
         }
 
         const end = this.eatAny(...endingTokens);
+        return {
+            elements: elements,
+            end: end
+        }
+    }
+
+    listOfKeywordTerminated(parseFunction, ...endingKeywords) {
+        const elements = [ ];
+
+        while(!endingKeywords.includes(this.peek().type)) {
+            elements.push(parseFunction());
+            const t = this.peek().type;
+            if(t == "comma" || t == "semicolon") {
+                this.eat();
+            }
+            else {
+                const end = this.eatAnyKeyword(...endingKeywords);
+                return {
+                    elements: elements,
+                    end: end
+                }
+            }
+        }
+
+        const end = this.eatAnyKeyword(...endingTokens);
         return {
             elements: elements,
             end: end

@@ -11,6 +11,12 @@ let serialise_table = \t ->
                 "${serialise k}: ${serialise v}, ${serialise_table_kv (tail kv)}"
     in "{ ${serialise_table_kv (pairs t)} }"
 
+let array_join = \a, sep = ", ", transformer = serialise ->
+    let n = len a in cases
+        | n == 0, ""
+        | n == 1, transformer (head a) 
+        | else, transformer (head a) .. sep .. array_join (tail a) sep transformer
+
 let serialise = \x -> 
     let T = type x in cases
         | T == "nil", "nil"
@@ -20,7 +26,10 @@ let serialise = \x ->
         | T == "function", "function"
         | T == "CFunction", "cfunction"
         | T == "userdata", "userdata"
-        | T == "table", serialise_table x
+        | T == "table", cases
+            | is_array x, "{ ${array_join x ", "} }"
+            | (getmetatable x) & (getmetatable x).__tostring, tostring(x)
+            | else, serialise_table x
         | else, panic!
 
-export serialise
+export serialise, array_join

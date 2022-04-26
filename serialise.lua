@@ -1,7 +1,7 @@
 
 local __pairs = pairs
 local unpack = unpack or table.unpack
-local function table_concat(a, b)
+local function concat(a, b)
     local c = { unpack(a) }
     for i=1, #b do
         c[#c+1] = b[i]
@@ -38,7 +38,7 @@ end
 ]]
 
 function table.merge(a, b)
-    local c = {}
+    local c = setmetatable({}, getmetatable(a))
     for k,v in __pairs(a) do c[k] = v end
     for k,v in __pairs(b) do c[k] = v end
     return c
@@ -71,8 +71,16 @@ end
 
 local function extend(__super, __proto) return proto(__proto, __super) end
 
-local function tail(a)
-    return { select(2, unpack(a)) }
+--[[
+local function head(a) return a[1] end
+local function tail(a) return {select(2,unpack(a))} end
+]]
+
+local function last(a) return a[#a] end
+local function body(a) 
+    local b = {} 
+    for i=1,#a-1 do b[i]=a[i] end 
+    return b 
 end
 
 local function pairs(t)
@@ -90,6 +98,27 @@ end
 local function panic()
     error("Panicked!", 2)
 end
+
+getmetatable("").__index = function(str,i) return string.sub(str,i,i) end
+
+local function identity(...)
+    return ...
+end
+
+local function count(a)
+    local i = 0
+    for k in __pairs(a) do i = i + 1 end
+    return i
+end
+
+local function set(t, k, v) 
+    if k then t[k] = v end
+    return t
+end
+
+local function dummy() end
+
 local serialise_table
-require("preamble");serialise_table = function(t)  do local serialise_table_kv;serialise_table_kv = function(kv)  do local n;n = len(kv);if (n==0) then return "" elseif (n==1) then do local k,v,__a;__a = head(kv);k = __a[1] v = __a[2] ;return string.format("%s: %s",serialise(k),serialise(v)) end else do local k,v,__a;__a = head(kv);k = __a[1] v = __a[2] ;return string.format("%s: %s, %s",serialise(k),serialise(v),serialise_table_kv(tail(kv))) end end end end;return string.format("{ %s }",serialise_table_kv(pairs(t))) end end
-serialise = function(x)  do local T;T = type(x);if (T=="nil") then return "nil" elseif (T=="number") then return tostring(x) elseif (T=="string") then return string.format("\"%s\"",x) elseif (T=="boolean") then return tostring(x) elseif (T=="function") then return "function" elseif (T=="CFunction") then return "cfunction" elseif (T=="userdata") then return "userdata" elseif (T=="table") then return serialise_table(x) else return panic((nil)) end end end
+require("preamble");serialise_table = function(t)  local serialise_table_kv;serialise_table_kv = function(kv)  local n;n = len(kv);if (n==0) then return "" elseif (n==1) then local k,v,__a;__a = head(kv);k = __a[1] v = __a[2] ;return string.format("%s: %s",serialise(k),serialise(v)) else local k,v,__a;__a = head(kv);k = __a[1] v = __a[2] ;return string.format("%s: %s, %s",serialise(k),serialise(v),serialise_table_kv(tail(kv))) end end;return string.format("{ %s }",serialise_table_kv(pairs(t))) end
+array_join = function(a,sep,transformer) if sep == nil then sep = ", " end if transformer == nil then transformer = serialise end local n;n = len(a);if (n==0) then return "" elseif (n==1) then return transformer(head(a)) else return ((transformer(head(a))..sep)..array_join(tail(a),sep,transformer)) end end
+serialise = function(x)  local T;T = type(x);if (T=="nil") then return "nil" elseif (T=="number") then return tostring(x) elseif (T=="string") then return string.format("\"%s\"",x) elseif (T=="boolean") then return tostring(x) elseif (T=="function") then return "function" elseif (T=="CFunction") then return "cfunction" elseif (T=="userdata") then return "userdata" elseif (T=="table") then if is_array(x) then return string.format("{ %s }",array_join(x,", ")) elseif (getmetatable(x) and getmetatable(x).__tostring) then return tostring(x) else return serialise_table(x) end else return panic((nil)) end end
