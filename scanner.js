@@ -277,11 +277,11 @@ exports.Scanner = class Scanner {
     
         if(KEYWORDS.includes(val)) return this.token("keyword", {
             value: val,
-            friendlyName: "a keyword ('" + val + "')"
+            friendlyName: "a keyword '" + val + "'"
         });
         else return this.token("identifier", {
             value: val,
-            friendlyName: "a word ('" + val + "')"
+            friendlyName: "a word '" + val + "'"
         });
     }
 

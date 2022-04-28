@@ -32,6 +32,28 @@ function ast(type, firstToken, lastToken, props) {
 const TRAVERSE_OPERATORS = [ "colon", "dot", "pound", "nullco" ];
 const UNARY_OPS = [ "minus", "not", "ellipses" ];
 
+const TRAVERSE_START_TOKENS = [ 
+    "number", 
+    "string", 
+    "open_square", 
+    "open_curly", 
+    "identifier", 
+    "backslash", 
+    "thin_arrow", 
+    "arrow", 
+    "dollar",
+    "open_paren",
+    "unit",
+    "excl",
+    "selfindex",
+    "at"
+]
+
+const TRAVERSE_START_KEYWORDS = [
+    "true",
+    "false"
+]
+
 class Parser {
 
     tokens = [ ]
@@ -157,7 +179,7 @@ class Parser {
     }
 
     recover() {
-        while(!this.isKeyword("import") && !this.isKeyword("export") && !this.isKeyword("let") && this.peek().type != "EOF") {
+        while(!this.isKeyword("import") && !this.isKeyword("export") && !this.isKeyword("let") && !this.isKeyword("set") && this.peek().type != "EOF") {
             this.offset++;
         }
     }
@@ -172,6 +194,7 @@ class Parser {
         }
     }
 
+
     program() {
 
         const imports = [ ];
@@ -182,9 +205,25 @@ class Parser {
         }
 
         const decs = [ ];
-        while(this.isKeyword("let") || this.isKeyword("set")) {
-            this.tryDo(errors, () => decs.push(this.declaration()));
+
+        while(true) {
+            while(this.isKeyword("let") || this.isKeyword("set")) {
+                this.tryDo(errors, () => decs.push(this.declaration()));
+            }
+
+            if(!this.isKeyword("export") && this.peek().type != "EOF") {
+                errors.push(
+                    this.generateError(
+                        "Expected a 'let', 'set', or 'export' statement, but got " + this.peek().friendlyName, 
+                        this.peek()));
+                
+                this.recover();
+                continue;
+            }
+
+            break;
         }
+            
 
         let ex = [ ];
         if(this.isKeyword("export")) {
@@ -205,7 +244,17 @@ class Parser {
                 errors.push(this.generateError("An export statement must be the last statement in a program.", t));
             }
         }
-            // throw this.generateError("A program can ")
+                // throw this.generateError("A program can ")
+            // if(this.peek().type == "EOF") {
+            //     this.eat();
+            // }
+            // else {
+                
+            // }
+
+        
+        // while(false);
+        
         this.tryDo(errors, () => this.eat("EOF"));
 
         return {
@@ -650,15 +699,21 @@ class Parser {
             const left = this.traverse();
 
             const args = [ ];
-            do {
-                let o = this.offset;
-                try {
-                    args.push(this.traverse());
-                } catch {
-                    this.offset = o;
-                    break;
-                }
-            } while (true);
+            let t = this.peek();
+            while(TRAVERSE_START_TOKENS.includes(t.type) || (t.type == "keyword" && TRAVERSE_START_KEYWORDS.includes(t.value))) {
+                args.push(this.traverse());
+                t = this.peek();
+            }
+
+            // do {
+            //     let o = this.offset;
+            //     try {
+            //         args.push(this.traverse());
+            //     } catch {
+            //         this.offset = o;
+            //         break;
+            //     }
+            // } while (true);
 
             if(args.length < 1) {
                 return left;

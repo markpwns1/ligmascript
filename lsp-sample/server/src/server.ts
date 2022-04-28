@@ -243,6 +243,7 @@ function getDefsInFile(filename, parser) {
 		// console.log(ast.exports);
 		for (const exp of ast.export) {
 			const def = ast.definitions.find(x => x.name == exp);
+			if(!def) continue;
 			const d = { name: def.name, type: def.value.type || "variable" };
 			importedFiles[filename].push(d);
 		}

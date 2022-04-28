@@ -32,6 +32,9 @@ let love_draw = ->
         .show_message = not show_message
     }
 
-let main = -> overwrite love {
-    .draw = love_draw
-}
+let main = -> overwrite love $ do 
+    print {
+        .draw = love_draw,
+        .update = unset
+    }
+    then ! 

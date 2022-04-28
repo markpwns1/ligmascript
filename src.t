@@ -426,6 +426,7 @@
 
 -- let main = -> print $ string.sub "x" "y" "z"
 
+--[
 import "serialise"
 
 let main = -> print $ serialise $ overwrite
@@ -444,7 +445,19 @@ let main = -> print $ serialise $ overwrite
         },
         .c = unset
     }
+]
 
+import "preamble"
+
+let f = print "hello world"
+
+end
+
+let x = 4
+
+end
+
+export x
 
 --[ Emits the following:
 local longest_increasing_arc,show,main

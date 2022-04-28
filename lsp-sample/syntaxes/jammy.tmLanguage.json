@@ -224,7 +224,7 @@
 		},
 		"constants": {
 			"name": "keyword.other.jammy",
-			"match": "(\\b(true|false|let|set|self|nil|@|super)\\b)|->|=>"
+			"match": "(\\b(not|unset|true|false|let|set|self|nil|@|super)\\b)|->|=>"
 		},
 		"strings": {
 			"begin": "(\")",

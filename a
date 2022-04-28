@@ -1,0 +1,25 @@
+
+-- local traceback0 = debug.traceback
+
+-- require("serialise")
+
+-- local success, result = pcall(f)
+-- if success then return success 
+-- else
+--     local filename, line, message = result:match('(.-):(%d+): (.+)')
+--     -- filename = filename:gsub('\\', '/')
+--     -- filename = filename:sub(1, filename:find('/[^/]*$')) .. __filename
+--     error(string.format("%s:%s: %s", __filename, __mappings[tonumber(line)] or line, message), 0)
+-- end
+
+-- debug.traceback = function(a, b, c) 
+--     -- print("Hello world!") 
+--     -- 
+--     print(serialise(a))
+--     print(serialise(b))
+--     print(serialise(c))
+--     return original_debug_traceback() .. "\nHello world!"
+-- end
+
+local x = require("b")
+x.y()
