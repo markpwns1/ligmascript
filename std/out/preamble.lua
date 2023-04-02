@@ -1,4 +1,4 @@
-
+require("__mappings") require("__runtime") __report_error(function() local head,all,any,map,filter,map_i,slice,tail,foldr,foldl,range,parts,pack,is_array,flatten,shallow_flatten,sole 
 head = 
 function(a)  return 
 
@@ -258,8 +258,8 @@ pairs(
 t),
 function(kv)  
 
-local k,v,__a;__a = 
-kv;k = __a[1] v = __a[2] ;return 
+local k,_,__a;__a = 
+kv;k = __a[1] ;return 
 (
 
 type(
@@ -309,4 +309,4 @@ function(a)  return
 a[
 
 len(
-a)] end 
+a)] end  end)

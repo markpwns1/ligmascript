@@ -1,0 +1,4 @@
+1. replace export statement with let export ... = ...
+2. first-class let-destructuring, general let rewrite
+3. a mechanism for module returns
+4. fix code generation probably

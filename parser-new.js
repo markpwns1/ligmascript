@@ -1,6 +1,7 @@
 
 const { AST } = require("./ast");
 const SYMBOLS = require("./symbols").SYMBOLS;
+const path = require("path");
 // const types = require("./old_type");
 
 const FRIENDLY_NAMES = {
@@ -39,8 +40,6 @@ const TRAVERSE_START_TOKENS = [
     "open_curly", 
     "identifier", 
     "backslash", 
-    "thin_arrow", 
-    "arrow", 
     "dollar",
     "open_paren",
     "unit",
@@ -56,11 +55,22 @@ const TRAVERSE_START_KEYWORDS = [
 
 class Parser {
 
-    tokens = [ ]
-    offset = 0
+    tokens = [ ];
+    offset = 0;
+    filename;
+    exports = [ ];
 
-    constructor(tokens) {
+    constructor(filename, tokens) {
         this.tokens = tokens;
+        this.filename = filename;
+    }
+
+    static combineParseResults(a, b) {
+        return {
+            export: a.export.concat(b.export),
+            definitions: a.definitions.concat(b.definitions),
+            errors: a.errors.concat(b.errors)
+        }
     }
 
     generateBinop(below, ...operators) {
@@ -100,6 +110,7 @@ class Parser {
         const error = Error("SYNTAX ERROR @ Ln " + pos.ln + ", col " + pos.col + " -- " + text);
         error.type = "parser";
         error.rawMessage = text;
+        error.filename = this.filename;
         error.offset = pos.offset;
         error.pos = pos;
         error.length = offender.length;
@@ -160,7 +171,7 @@ class Parser {
     }
 
     identifier() {
-        return this.eat("identifier").value;
+        return this.eat("identifier");
     }
 
     keyword(value) {
@@ -179,7 +190,7 @@ class Parser {
     }
 
     recover() {
-        while(!this.isKeyword("import") && !this.isKeyword("export") && !this.isKeyword("let") && !this.isKeyword("set") && this.peek().type != "EOF") {
+        while(!this.isKeyword("import") && !this.isKeyword("let") && !this.isKeyword("set") && this.peek().type != "EOF") {
             this.offset++;
         }
     }
@@ -199,6 +210,8 @@ class Parser {
 
         const imports = [ ];
         const errors = [ ];
+        this.exports = [ ];
+
         while(this.isKeyword("import")) {
             this.eat();
             this.tryDo(errors, () => imports.push(this.string()));
@@ -208,13 +221,13 @@ class Parser {
 
         while(true) {
             while(this.isKeyword("let") || this.isKeyword("set")) {
-                this.tryDo(errors, () => decs.push(this.declaration()));
+                this.tryDo(errors, () => decs.push(this.declaration(true)));
             }
 
-            if(!this.isKeyword("export") && this.peek().type != "EOF") {
+            if(/* !this.isKeyword("export") && */this.peek().type != "EOF") {
                 errors.push(
                     this.generateError(
-                        "Expected a 'let', 'set', or 'export' statement, but got " + this.peek().friendlyName, 
+                        "Expected a 'let' or 'set' statement, but got " + this.peek().friendlyName, 
                         this.peek()));
                 
                 this.recover();
@@ -225,24 +238,27 @@ class Parser {
         }
             
 
-        let ex = [ ];
-        if(this.isKeyword("export")) {
-            this.eat();
-            const items = this.listOf(this.identifier.bind(this), "EOF");
-            this.tryDo(errors, () => ex = items.elements);
-        }
+        // let ex = [ ];
+        // if(this.isKeyword("export")) {
+        //     this.eat();
+        //     this.tryDo(errors, () => {
+        //         const items = this.listOf(this.variable.bind(this), "EOF");
+        //         ex = items.elements
+        //     });
+        // }
 
         const t = this.peek();
         if(t.type == "keyword") {
-            if(t.value == "export") {
-                errors.push(this.generateError("There can only be one export statement in a program.", t));
-            }
-            else if(t.value == "import") {
+            // if(t.value == "export") {
+            //     errors.push(this.generateError("There can only be one export statement in a program.", t));
+            // }
+            // else 
+            if(t.value == "import") {
                 errors.push(this.generateError("Import statements must be placed before all declarations.", t));
             }
-            else {
-                errors.push(this.generateError("An export statement must be the last statement in a program.", t));
-            }
+            // else {
+            //     errors.push(this.generateError("An export statement must be the last statement in a program.", t));
+            // }
         }
                 // throw this.generateError("A program can ")
             // if(this.peek().type == "EOF") {
@@ -259,7 +275,7 @@ class Parser {
 
         return {
             imports: imports,
-            export: ex,
+            export: this.exports,
             definitions: decs,
             errors: errors
         }
@@ -276,9 +292,11 @@ class Parser {
         });
     }
 
-    simpleDefinition() {
-        const begin = this.keyword("let");
+    simpleDefinition(begin, isExport) {
         const name = this.identifier();
+        if(isExport && name.value != "_") {
+            this.exports.push(name);
+        }
         this.eat("equals");
         const value = this.expression();
         // console.log(this.peek());
@@ -288,8 +306,7 @@ class Parser {
         });
     }
 
-    arrayDestructure() {
-        const begin = this.keyword("let");
+    arrayDestructure(begin, isExport) {
         this.eat("open_square");
         const head = this.listOf(this.identifier.bind(this), "ellipses", "close_square");
         let tail;
@@ -298,25 +315,40 @@ class Parser {
         }
         this.eat("equals");
         const value = this.expression();
+        const tailElements = tail? tail.elements : [ ];
+
+        if(isExport) {
+            this.exports.push(
+                ...head.elements.map(e => e.value).filter(x => x != "_"), 
+                ...tailElements.map(e => e.value).filter(x => x != "_")
+            );
+        }
+
         return ast("array_destructure", begin, tail? tail.end : head.end, {
             head: head.elements,
-            tail: tail? tail.elements : [ ],
+            tail: tailElements,
             value: value
         });
     }
 
-    tableDestructureElement() {
+    tableDestructureElement(isExport) {
         const t = this.peek();
         if(t.type == "dot") {
             this.eat();
-            const name = this.eat("identifier");
+            const name = this.identifier();
+            if(isExport && name.value != "_") {
+                this.exports.push(name.value);
+            }
             return {
-                name: name.value,
+                name: name,
                 index: ast("string", t, name, { value: name.value })
             }
         }
         else {
             const name = this.identifier();
+            if(isExport && name.value != "_") {
+                this.exports.push(name.value);
+            }
             this.eat("equals");
             const t = this.peek();
             if(t.type == "dot") {
@@ -334,10 +366,9 @@ class Parser {
         }
     }
 
-    tableDestructure() {
-        const begin = this.keyword("let");
+    tableDestructure(begin, isExport) {
         this.eat("open_curly");
-        const items = this.listOf(this.tableDestructureElement.bind(this), "close_curly");
+        const items = this.listOf(this.tableDestructureElement.bind(this, isExport), "close_curly");
         this.eat("equals");
         const value = this.expression();
 
@@ -492,24 +523,38 @@ class Parser {
         });
     }
 
-    declaration() {
+    declaration(isTopLevel = false) {
         if(this.isKeyword("let")) {
-            const o = this.offset;
-            this.keyword("let");
+            // const o = this.offset;
+            const begin = this.keyword("let");
+
+            let isExport = false;
+            if(isTopLevel && this.isKeyword("export")) {
+                this.keyword("export");
+                isExport = true;
+            }
+
+            let result;
             switch(this.peek().type) {
                 case "open_square": {
-                    this.offset = o;
-                    return this.arrayDestructure();
+                    // this.offset = o;
+                    result = this.arrayDestructure(begin, isExport);
+                    break;
                 }
                 case "open_curly": {
-                    this.offset = o;
-                    return this.tableDestructure();
+                    // this.offset = o;
+                    result = this.tableDestructure(begin, isExport);
+                    break;
                 }
                 default: {
-                    this.offset = o;
-                    return this.simpleDefinition();
+                    // this.offset = o;
+                    result = this.simpleDefinition(begin, isExport);
+                    break;
                 }
             }
+            
+            result.isExport = isExport;
+            return result;
         }
         else if(this.isKeyword("set")) {
             return this.assignment();
@@ -691,6 +736,11 @@ class Parser {
     //     else return this.application();
     // }
 
+    variable() {
+        const t = this.eat("identifier");
+        return ast("variable", t, t, { name: t.value });
+    }
+
     application() {
         if(this.isKeyword("try")) {
             return this.try();
@@ -759,7 +809,7 @@ class Parser {
         } while (true);
 
         if(args.length == 0)
-            throw this.generateError("Expected one or more arguments to the method '" + name + "' but got " + this.peek().friendlyName, this.peek());
+            throw this.generateError("Expected one or more arguments to the method '" + name.value + "' but got " + this.peek().friendlyName, this.peek());
 
         return {
             type: "method_call",
@@ -784,7 +834,7 @@ class Parser {
         const t = this.eat("identifier");
         return {
             type: "property",
-            name: t.value,
+            name: t,
             lastToken: t
         }
     }
@@ -794,7 +844,7 @@ class Parser {
         const t = this.eat("identifier");
         return {
             type: "nullco",
-            name: t.value,
+            name: t,
             lastToken: t
         }
     }
@@ -853,10 +903,7 @@ class Parser {
 
             case "string": return this.string();
 
-            case "identifier": {
-                this.eat();
-                return ast("variable", t, t, { name: t.value });
-            }
+            case "identifier": return this.variable();
 
             case "excl":
             case "unit": {
@@ -931,7 +978,7 @@ class Parser {
             t, t,
             {
                 value: t.value,
-                format_values: t.interpolations.map(x => new Parser(x).expression())
+                format_values: t.interpolations.map(x => new Parser(this.filename, x).expression())
             }
         );
     }
@@ -952,8 +999,7 @@ class Parser {
         }
 
         return {
-            name: name.value,
-            token: name,
+            name: name,
             variadic: variadic,
             defaultValue: value
         }
@@ -963,11 +1009,12 @@ class Parser {
         const begin = this.eat("backslash");
         const args = (() => {
             const a = [ ]
-            let t = this.peek().type;
+            const t_tok = this.peek();
+            let t = t_tok.type;
             if(t == "dot") {
                 this.eat();
                 const eaten = this.eatAny("arrow", "thin_arrow");
-                return [ { name: eaten.type == "thin_arrow"? "_" : "self", token: t, variadic: false } ];
+                return [ { name: eaten.type == "thin_arrow"? "_" : "self", token: t_tok, variadic: false } ];
             }
             else {
                 while(t != "arrow" && t != "thin_arrow") {

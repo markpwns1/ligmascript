@@ -4,6 +4,7 @@ class Variable {
     global;
     scope;
     exported = false;
+    decno;
     type;
     depth;
     used = false;

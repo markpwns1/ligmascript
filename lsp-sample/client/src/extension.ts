@@ -4,7 +4,20 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as path from 'path';
-import { workspace, ExtensionContext, window } from 'vscode';
+import { 
+	workspace, 
+	ExtensionContext, 
+	window, 
+	DocumentSemanticTokensProvider, 
+	languages, 
+	SemanticTokensLegend, 
+	SemanticTokensBuilder,
+	Range,
+	Position,
+	SemanticTokens,
+	TextDocument,
+	ProviderResult,
+} from 'vscode';
 
 import {
 	LanguageClient,
@@ -14,6 +27,42 @@ import {
 } from 'vscode-languageclient/node';
 
 let client: LanguageClient;
+
+const ligmascriptSelector = { scheme: 'file', language: 'ligmascript' };
+
+const tokenTypes = ['class', 'interface', 'enum', 'function', 'variable'];
+const tokenModifiers = ['declaration', 'documentation'];
+const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers);
+
+let semanticTokens = [ ];
+
+const provider: DocumentSemanticTokensProvider = {
+  provideDocumentSemanticTokens(
+    document: TextDocument
+  ): ProviderResult<SemanticTokens> {
+    // analyze the document and return semantic tokens
+
+    const tokensBuilder = new SemanticTokensBuilder(legend);
+
+	for (const t of semanticTokens) {
+		// console.log(t.type);
+		tokensBuilder.push(
+			new Range(new Position(t.beginLn - 1, t.beginCol - 1), new Position(t.endLn - 1, t.endCol - 1)), t.type, [ ]);
+	}
+
+    // // on line 1, characters 1-5 are a class declaration
+    // tokensBuilder.push(
+    //   new Range(new Position(1, 1), new Position(1, 5)),
+    //   'class',
+    //   ['declaration']
+    // );
+
+	// console.log("CHANGE");
+
+    return tokensBuilder.build();
+  }
+  
+};
 
 export function activate(context: ExtensionContext) {
 	// The server is implemented in node
@@ -38,7 +87,7 @@ export function activate(context: ExtensionContext) {
 	// Options to control the language client
 	const clientOptions: LanguageClientOptions = {
 		// Register the server for plain text documents
-		documentSelector: [{ scheme: 'file', language: 'jammy' }],
+		documentSelector: [ligmascriptSelector],
 		synchronize: {
 			// Notify the server about file changes to '.clientrc files contained in the workspace
 			fileEvents: workspace.createFileSystemWatcher('**/.clientrc')
@@ -54,14 +103,30 @@ export function activate(context: ExtensionContext) {
 	);
 
 	window.onDidChangeActiveTextEditor(e => {
-		console.log("CHANGE TAB");
-		// client.
-	
-		client.sendNotification("jammy/windowchange", [e.document.uri.toString(), "jammy", e.document.version, e.document.getText() ]);
-	})
+		client.sendNotification("ligmascript/windowchange", [e.document.uri.toString(), "ligmascript", e.document.version, e.document.getText() ]);
+	});
 
+
+	languages.registerDocumentSemanticTokensProvider(ligmascriptSelector, provider, legend);
+
+	
+	client.onReady().then(() => {
+		client.onNotification("ligmascript/semantictokenupdate", tokens => {
+			// // console.log(tokens);
+			// console.log("AAA");
+			// // provider.onDidChangeSemanticTokens();
+			// provider.provideDocumentSemanticTokens();
+			// Sema
+			// console.log("AAAA");
+			// console.log(tokens);
+			semanticTokens = tokens;
+		});
+	});
+
+	
 	// Start the client. This will also launch the server
 	client.start();
+
 }
 
 export function deactivate(): Thenable<void> | undefined {
@@ -70,3 +135,6 @@ export function deactivate(): Thenable<void> | undefined {
 	}
 	return client.stop();
 }
+
+
+

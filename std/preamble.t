@@ -2,6 +2,11 @@
 -- TODO: allow
 --  let x.y = whatever
 
+-- let none = {
+--     .bind = \. -> none;
+--     .is_none = true;
+-- }
+
 -- let some = proto {
 --     .constructor = \value -> { .value };
 --     .bind = \fn => maybe (fn self.value);
@@ -90,7 +95,7 @@ let pack = \x... -> x
 
 let is_array = \t -> 
     type t == "table" & all (pairs t) \kv -> 
-        let [ k, v ] = kv in type k == "number"
+        let [ k, _ ] = kv in type k == "number"
 
 -- let flatten = \a -> cases
 --     | is_array a, let n = len a in cases
@@ -107,12 +112,9 @@ let shallow_flatten = \a -> foldl a [] (\l, r -> cases
     | else, l ++ [r]) 
 
 let sole = \a -> a # (len a)
+    
 
 -- [ 1, [ 2, 3 ] ]
-
--- let x = match y
---     | [ $A, $A, $A ], A
---     | { .a = $A, .b = $A, .c = $A }, A
 
 export 
     head, 

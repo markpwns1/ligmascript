@@ -2,6 +2,11 @@
 -- TODO: allow
 --  let x.y = whatever
 
+-- let none = {
+--     .bind = \. -> none;
+--     .is_none = true;
+-- }
+
 -- let some = proto {
 --     .constructor = \value -> { .value };
 --     .bind = \fn => maybe (fn self.value);
@@ -109,10 +114,6 @@ let shallow_flatten = \a -> foldl a [] (\l, r -> cases
 let sole = \a -> a # (len a)
 
 -- [ 1, [ 2, 3 ] ]
-
--- let x = match y
---     | [ $A, $A, $A ], A
---     | { .a = $A, .b = $A, .c = $A }, A
 
 export 
     head, 

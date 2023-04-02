@@ -1,6 +1,6 @@
 {
 	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-	"name": "jammy",
+	"name": "ligmascript",
 	"patterns": [
 		{
 			"include": "#scope"
@@ -142,45 +142,6 @@
 				}
 			]
 		},
-		"funccall_excl": {
-			"match": "(\\.)?([a-zA-Z_][a-zA-Z0-9_]*)\\s*(\\!)",
-			"captures": {
-				"2": {
-					"name": "entity.name.function"
-				}
-			}
-		},
-		"funccall": {
-			"begin": "(\\.)?([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
-			"end": "\\)",
-			"beginCaptures": {
-				"2": {
-					"name": "entity.name.function"
-				}
-			},
-			"patterns": [
-				{
-					"include": "#scope"
-				}
-			]
-		},
-		"letstmt": {
-			"begin": "(let)\\s([a-zA-Z_][a-zA-Z0-9_]*)",
-			"end": "=|;",
-			"beginCaptures": {
-				"1": {
-					"name": "keyword.other"
-				},
-				"2": {
-					"name": "variable.parameter"
-				}
-			},
-			"patterns": [
-				{
-					"include": "#funcarg"
-				}
-			]
-		},
 		"funcargs": {
 			"begin": "\\(([a-zA-Z_][a-zA-Z0-9_]*)\\s*",
 			"end": "\\)",
@@ -219,11 +180,11 @@
 			"match": "[0-9]+(\\.[0-9]+)?"
 		},
 		"keywords": {
-			"name": "keyword.control.jammy",
-			"match": "\\b(end|then|do|export|if|while|for|in|return|with|else|try|match|break|continue|use|len|print)\\b"
+			"name": "keyword.control.ligmascript",
+			"match": "\\b(import|cases|end|then|do|export|if|while|for|in|return|with|else|try|match|break|continue|use|print)\\b"
 		},
 		"constants": {
-			"name": "keyword.other.jammy",
+			"name": "keyword.other.ligmascript",
 			"match": "(\\b(not|unset|true|false|let|set|self|nil|@|super)\\b)|->|=>"
 		},
 		"strings": {
@@ -231,12 +192,12 @@
 			"end": "(\")",
 			"beginCaptures": {
 				"1": {
-					"name": "string.quoted.double.jammy"
+					"name": "string.quoted.double.ligmascript"
 				}
 			},
 			"endCaptures": {
 				"1": {
-					"name": "string.quoted.double.jammy"
+					"name": "string.quoted.double.ligmascript"
 				}
 			},
 			"patterns": [
@@ -244,17 +205,17 @@
 					"include": "#stringformat"
 				},
 				{
-					"name": "constant.character.escape.jammy",
+					"name": "constant.character.escape.ligmascript",
 					"match": "\\\\."
 				},
 				{
-					"name": "string.quoted.double.jammy",
+					"name": "string.quoted.double.ligmascript",
 					"match": "."
 				}
 			]
 		},
 		"comment block": {
-			"name": "comment.block.jammy",
+			"name": "comment.block.ligmascript",
 			"begin": "\\-\\-\\[",
 			"end": "\\]",
 			"patterns": [
@@ -264,15 +225,15 @@
 				{
 					"begin": "\\[",
 					"end": "\\]",
-					"name": "comment.block.jammy"
+					"name": "comment.block.ligmascript"
 				}
 			]
 		},
 		"comment": {
-			"name": "comment.line.double-slash.jammy",
+			"name": "comment.line.double-slash.ligmascript",
 			"begin": "\\-\\-",
 			"end": "\n"
 		}
 	},
-	"scopeName": "source.jammy"
+	"scopeName": "source.ligmascript"
 }

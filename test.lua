@@ -8,9 +8,7 @@ function __report_error(f)
     if success then return success 
     else
         local filename, line, message = result:match("(.-):(%d+): (.+)")
-        -- filename = filename:gsub("\\", "/")
-        -- filename = filename:sub(1, filename:find("/[^/]*$")) .. __filename
-        error(string.format("%s:%s: %s", __filename, __mappings[tonumber(line)] or line, message), 0)
+        error(string.format("%s:%s: %s", __filename, __mappings[filename][tonumber()] or line, message), 0)
     end
 end
 

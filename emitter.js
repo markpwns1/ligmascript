@@ -28,9 +28,9 @@ const OUTPUT_FILE = process.argv[3] || (INPUT_FILE.substring(0, INPUT_FILE.lastI
 // const src = preprocess(fs.readFileSync(INPUT_FILE, "utf-8"));
 // const ast = parser.parse(src);
 
+const getValue = x => x.value;
 
-
-const definitions = [ ];
+let definitions = [ ];
 
 let depth = 0;
 
@@ -66,14 +66,14 @@ const addDefinition = (ast, name) => {
 const evaluators = { };
 
 evaluators.simple_def = ast => {
-    let prefix = "local " + emitIdentifier(ast.name) + ";";
+    let prefix = "local " + emitIdentifier(ast.name.value) + ";";
 
     if(depth == 0) {
-        addDefinition(ast, ast.name);
+        addDefinition(ast, ast.name.value);
         prefix = "";
     }
     
-    return prefix + evalBody(ast.value, true, setVarReturn(ast.name));
+    return prefix + evalBody(ast.value, true, setVarReturn(ast.name.value));
 }
 
 evaluators.array_destructure = ast => {
@@ -86,7 +86,7 @@ evaluators.array_destructure = ast => {
 
     // return prefix + evalBody(ast.value, true, setVarsReturn(ast.names));
 
-    const allNames = ast.head.concat(ast.tail).concat(["__a"]);
+    const allNames = ast.head.map(getValue).concat(ast.tail.map(getValue)).concat(["__a"]).filter(x => x != "_");
     let prefix = "local " + allNames.join(",") + ";";
 
     if(depth == 0) {
@@ -96,13 +96,15 @@ evaluators.array_destructure = ast => {
 
     let txt = prefix + evalBody(ast.value, true, setVarReturn("__a")) + ";";
     for (let i = 0; i < ast.head.length; i++) {
-        const name = ast.head[i];
-        txt += name + " = __a[" + (i + 1) + "] "
+        const name = ast.head[i].value;
+        if(name != "_")
+            txt += name + " = __a[" + (i + 1) + "] "
     }
 
     for (let i = 0; i < ast.tail.length; i++) {
-        const name = ast.tail[i];
-        txt += name + " = __a[#__a - " + (ast.tail.length - i - 1) + "] "
+        const name = ast.tail[i].value;
+        if(name != "_")
+            txt += name + " = __a[#__a - " + (ast.tail.length - i - 1) + "] "
     }
 
     return txt;
@@ -110,14 +112,14 @@ evaluators.array_destructure = ast => {
 }
 
 evaluators.table_destructure = ast => {
-    let prefix = "local " + ast.pairs.map(x => x.name).join(",") + ";";
+    let prefix = "local " + ast.pairs.map(x => x.name.value).filter(x => x != "_").join(",") + ";";
 
     if(depth == 0) {
-        ast.pairs.map(x => x.name).forEach(x => addDefinition(ast, x));
+        ast.pairs.map(x => x.name.value).filter(x => x != "_").forEach(x => addDefinition(ast, x));
         prefix = "";
     }
 
-    return "local __t = " + evaluate(ast.value) + ";" + prefix + ast.pairs.map(x => x.name + " = __t[" + evaluate(x.index) + "]").join(";");
+    return "local __t = " + evaluate(ast.value) + ";" + prefix + ast.pairs.filter(x => x.name.value != "_").map(x => x.name.value + " = __t[" + evaluate(x.index) + "]").join(";");
 }
 
 const SPECIALS = [ "when_expr", "do_expr", "let_in_expr", "assignment", "try_expr", "array_comprehension" ]
@@ -180,29 +182,29 @@ evaluators.let_in_expr = (ast, simplify, returnPrefix) => {
 
 }
 
-evaluators.array_comprehension = (ast, simplify, returnPrefix = defaultReturn) => body(simplify, "local __t = {} for _, " + ast.iter_var + " in __pairs(" + evaluate(ast.collection) + ") do " + (ast.filters.length > 0? ("if " + ast.filters.map(x => "(" + evaluate(x) + ")").join(" and ") + " then " + evalBody(ast.expression, simplify, setVarReturn("__t[#__t+1]")) + " end") : (evalBody(ast.expression, simplify, setVarReturn("__t[#__t+1]")))) + " end " + returnPrefix("__t"))
+evaluators.array_comprehension = (ast, simplify, returnPrefix = defaultReturn) => body(simplify, "local __t = {} for _, " + ast.iter_var.value + " in __pairs(" + evaluate(ast.collection) + ") do " + (ast.filters.length > 0? ("if " + ast.filters.map(x => "(" + evaluate(x) + ")").join(" and ") + " then " + evalBody(ast.expression, simplify, setVarReturn("__t[#__t+1]")) + " end") : (evalBody(ast.expression, simplify, setVarReturn("__t[#__t+1]")))) + " end " + returnPrefix("__t"))
 
-evaluators.property = ast => evaluate(ast.table) + "." + emitIdentifier(ast.name);
+evaluators.property = ast => evaluate(ast.table) + "." + emitIdentifier(ast.name.value);
 evaluators.index = ast => evaluate(ast.table) + "[" + evaluate(ast.index) + "]";
 evaluators.nullco = ast => {
     const txt = evaluate(ast.table);
-    return "(" + txt + " and " + txt + "." + ast.name + ")"
+    return "(" + txt + " and " + txt + "." + ast.name.value + ")"
 }
 
 evaluators.function = ast => {
 
-    let txt = "function(" + ast.parameters.map(x => x.variadic? "..." : x.name).join(",") + ") ";
+    let txt = "function(" + ast.parameters.map(x => x.variadic? "..." : x.name.value).join(",") + ") ";
 
     depth++;
 
     // console.log(ast.parameters);
     const last = ast.parameters[ast.parameters.length - 1];
     if(ast.parameters.length > 0 && last.variadic) {
-        txt += "local " + last.name + " = {...} "
+        txt += "local " + last.name.value + " = {...} "
     };
 
     txt += ast.parameters.filter(x => x.defaultValue).map(
-        x => (x.variadic? ("if #" + x.name + " == 0 then ") : ("if " + x.name + " == nil then ")) + x.name + " = " + evaluate(x.defaultValue) + " end").join(" ")
+        x => (x.variadic? ("if #" + x.name.value + " == 0 then ") : ("if " + x.name.value + " == nil then ")) + x.name.value + " = " + evaluate(x.defaultValue) + " end").join(" ")
         + " " + evalBody(ast.result, true) + " end"
 
     depth--;
@@ -260,7 +262,7 @@ evaluators.parenthesised = ast => "(" + evaluate(ast.inner) + ")";
 evaluators.array = ast => "{" + ast.elements.map(x => evaluate(x)).join(",") + "}";
 evaluators.table = ast => "{" + ast.elements.map(x => "[" + evaluate(x.index) + "]=" + evaluate(x.value)).join(",") + "}";
 
-evaluators.method_call = ast => evaluate(ast.table) + ":" + emitIdentifier(ast.name) + "(" + ast.args.map(x => evaluate(x)).join(",") + ")";
+evaluators.method_call = ast => evaluate(ast.table) + ":" + emitIdentifier(ast.name.value) + "(" + ast.args.map(x => evaluate(x)).join(",") + ")";
 
 evaluators.application = ast => evaluate(ast.f) + "(" + ast.args.map(x => evaluate(x)).join(",") + ")";
 
@@ -274,7 +276,7 @@ function evaluate(ast, ...settings) {
     const f = evaluators[ast.type];
     if(f) {
         lineno++;
-        mappings[lineno] = ast.firstToken.pos.ln;
+        mappings[currentFile][lineno] = ast.firstToken.pos.ln;
         return "\n" + f(ast, ...settings);
     }
     else throw "No evaluator for: " + JSON.stringify(ast, null, 2);
@@ -282,143 +284,21 @@ function evaluate(ast, ...settings) {
 
 // console.log();
 
-const preamble = `
-local __pairs = pairs
-local unpack = unpack or table.unpack
-local function concat(a, b)
-    local c = { unpack(a) }
-    for i=1, #b do
-        c[#c+1] = b[i]
-    end
-    return c
-end
 
-local function len(a) return #a end
-local function nop() end
 
-local function symbol() 
-    if __symbol_id then 
-        __symbol_id = __symbol_id + 1 
-    else 
-        __symbol_id = 1
-    end
-    return __symbol_id
-end
-
-local unset = symbol()
-local function overwrite(a, b)
-    for k,v in __pairs(b) do 
-        if type(a[k]) == "table" and type(v) == "table" then 
-            overwrite(a[k], v)
-        elseif v == unset then
-            a[k] = nil
-        else
-            a[k] = v 
-        end
-    end
-    return a
-end
-
-function table.merge(a, b)
-    local c = setmetatable({}, getmetatable(a))
-    for k,v in __pairs(a) do c[k] = v end
-    for k,v in __pairs(b) do c[k] = v end
-    return c
-end
-
-local function is_subclass(A, B)
-    local mt = getmetatable(A)
-    while mt do
-        if mt == B then return true end
-        mt = getmetatable(mt)
-    end
-    return false
-end
-
-local function get_empty_table() return {} end
-local function proto(__proto, __super)
-    __proto.__index = __proto
-    __proto.constructor = __proto.constructor or get_empty_table
-    __proto.__proto = __proto.__proto or __proto
-    __proto.__super = __proto.__super or __super
-    local construct = {
-        __call = function(self, ...)
-            return setmetatable(__proto.constructor(...), __proto)
-        end,
-        __index = __super
-    }
-    if __super then construct = setmetatable(construct, __super) end
-    return setmetatable(__proto, construct);
-end
-
-local function extend(__super, __proto) return proto(__proto, __super) end
-
-local function last(a) return a[#a] end
-local function body(a) 
-    local b = {} 
-    for i=1,#a-1 do b[i]=a[i] end 
-    return b 
-end
-
-local function pairs(t)
-    local keyset = {}
-    for k, v in __pairs(t) do keyset[#keyset+1] = {k, v} end
-    return keyset
-end
-
-local function DEBUG(a)
-    for k, v in __pairs(a) do
-        print(k, v)
-    end
-end
-
-local function panic()
-    error("Panicked!", 2)
-end
-
-do 
-    local old_index = getmetatable("").__index
-    getmetatable("").__index = function(str,i) if type(i) == "number" then return string.sub(str,i,i) else return old_index[i] end end
-end
-
-local function identity(...) return ... end
-
-local function count(a)
-    local i = 0
-    for k in __pairs(a) do i = i + 1 end
-    return i
-end
-
-local function modify(t, k, v) 
-    if k then t[k] = v end
-    return t
-end
-
-local function __not(x) return not x end
-
-local function __report_error(f)
-    local success, result = pcall(f)
-    if success then return success 
-    else
-        local filename, line, message = result:match('(.-):(%d+): (.+)')
-        -- filename = filename:gsub('\\', '/')
-        -- filename = filename:sub(1, filename:find('/[^/]*$')) .. __filename
-        error(string.format("%s:%s: %s", __filename, __mappings[tonumber(line)] or line, message), 0)
-    end
-end
-
-local main = nop
-
-`;
-
+const luafyFilename = filename => filename.substring(0, filename.lastIndexOf(".")) + ".lua";
 const getLineCount = x => x.split("\n").length;
 
 let txt = "";
-let lineno = getLineCount(preamble) + 1;
+let lineno = 1;// getLineCount(preamble) + 1;
 let mappings = { };
 
+let currentFile;
 
-const emit = (ast) => {
+const emit = (ast, filename) => {
+    definitions = [ ];
+    currentFile = path.normalize(filename);
+    mappings[currentFile] = { };
     let errors = ast.errors;
     errors = [ ...errors ];
     txt = "";
@@ -432,8 +312,9 @@ const emit = (ast) => {
         }
     }
 
-    for (const im of ast.imports) {
-        tryDo(() => txt += "require(" + evaluate(im) + ");");
+    for(const i of ast.imports) {
+        mappings[currentFile][1] = i.firstToken.pos.ln;
+        txt += 'import("' + luafyFilename(i.value).replace(/\\/g, "/") + '") ';
     }
 
     for (const dec of ast.definitions) {
@@ -441,20 +322,21 @@ const emit = (ast) => {
     }
 
     if(definitions.includes("main"))
-        txt += "main()"
+        txt += 'main()';
+        // txt += 'main()';
 
     if(definitions.length > 0) {
-        const locals = definitions.filter(x => !ast.export.includes(x));
+        const locals = definitions.filter(x => !ast.export.map(x => x.value).includes(x));
         if(locals.length > 0) {
             txt = "local " + locals.map(x => emitIdentifier(x)).join(",") + " " + txt;
         }
     }
 
-    for (const ex of ast.export) {
-        if(!definitions.includes(ex)) {
-            errors.push(err(null, "Attempt to export variable '" + ex + "' that has not been defined."));
-        }
-    }
+    // for (const ex of ast.export) {
+    //     if(!definitions.includes(ex.value)) {
+    //         errors.push(err(null, "Attempt to export variable '" + ex.value + "' that has not been defined."));
+    //     }
+    // }
 
     return {
         lua: txt,
@@ -462,111 +344,116 @@ const emit = (ast) => {
     }
 }
 
-const compile = (inputFile, outputFile) => {
+// const compile = (inputFile, outputFile) => {
     
-    const source = fs.readFileSync(inputFile, "utf-8");
-    const scanner = new Scanner().scan(source);
-    const parser = new Parser(scanner.tokens);
-    ast = parser.program();
-    // console.log(JSON.stringify(ast, null, 2));
+//     const source = fs.readFileSync(inputFile, "utf-8");
+//     const scanner = new Scanner().scan(source);
+//     const parser = new Parser(scanner.tokens);
+//     ast = parser.program();
     
-    let errors = ast.errors;
+//     // console.log(JSON.stringify(ast, null, 2));
+    
+//     // let errors = ast.errors;
 
-    errors = [ ...errors, /*...types.typecheck(ast.definitions)*/ ];
+//     // errors = [ ...errors, /*...types.typecheck(ast.definitions)*/ ];
 
-    // console.log(JSON.stringify(types.scopes, null, 2));
+//     // console.log(JSON.stringify(types.scopes, null, 2));
 
-    txt = "";
+//     txt = "";
 
-    const tryDo = f => {
-        try {
-            return f();
-        }
-        catch (e) {
-            errors.push(e);
-        }
-    }
+//     const tryDo = f => {
+//         try {
+//             return f();
+//         }
+//         catch (e) {
+//             errors.push(e);
+//         }
+//     }
 
-    for (const im of ast.imports) {
-        tryDo(() => txt += "require(" + evaluate(im) + ");");
-    }
+//     for (const im of ast.imports) {
+//         tryDo(() => txt += "require(" + evaluate(im) + ");");
+//     }
 
-    for (const dec of ast.definitions) {
-        tryDo(() => txt += evaluate(dec) + " ");
-    }
+//     for (const dec of ast.definitions) {
+//         tryDo(() => txt += evaluate(dec) + " ");
+//     }
 
-    if(definitions.includes("main"))
-        txt += "main()"
-        // txt += "\n__report_error(main)";
+//     if(definitions.includes("main"))
+//         txt += "main()"
+//         // txt += "\n__report_error(main)";
 
-    if(definitions.length > 0) {
-        const locals = definitions.filter(x => !ast.export.includes(x));
-        if(locals.length > 0) {
-            txt = "local " + locals.map(x => emitIdentifier(x)).join(",") + " " + txt;
-        }
-    }
+//     if(definitions.length > 0) {
+//         const locals = definitions.filter(x => !ast.export.map(x => x.name).includes(x));
+//         if(locals.length > 0) {
+//             txt = "local " + locals.map(x => emitIdentifier(x)).join(",") + " " + txt;
+//         }
+//     }
 
-    for (const ex of ast.export) {
-        if(!definitions.includes(ex)) {
-            errors.push(err(null, "Attempt to export variable '" + ex + "' that has not been defined."));
-        }
-    }
+//     // console.log(ast.export);
+//     // for (const ex of ast.export) {
+//     //     if(!definitions.includes(ex.name)) {
+//     //         errors.push(err(null, "Attempt to export variable '" + ex.name + "' that has not been defined."));
+//     //     }
+//     // }
 
-    // txt = "local __filename, __mappings = \"" + path.resolve(inputFile).replace(/\\/g, "/") + "\", {" + Object.keys(mappings).map(x => "[" + x + "]=" + mappings[x]).join(",") + "}"
-    //     + preamble + txt;
+//     // txt = "local __filename, __mappings = \"" + path.resolve(inputFile).replace(/\\/g, "/") + "\", {" + Object.keys(mappings).map(x => "[" + x + "]=" + mappings[x]).join(",") + "}"
+//     //     + preamble + txt;
 
-    if(errors.length > 0) {
-        const lines = source.split("\n");
-        console.log(errors.length + " ERRORS:");
+//     // if(errors.length > 0) {
+//     //     const lines = source.split("\n");
+//     //     console.log(errors.length + " ERRORS:");
 
-        let i = 0;
-        for (const err of errors) {
-            try {
-                if(err.type) {
-                    if(err.pos) {
-                        const pos = err.pos;
-                        const length = err.length || err.pos.length || 1;
+//     //     let i = 0;
+//     //     for (const err of errors) {
+//     //         try {
+//     //             if(err.type) {
+//     //                 if(err.pos) {
+//     //                     const pos = err.pos;
+//     //                     const length = err.length || err.pos.length || 1;
             
-                        let text = (++i) + ". ";
-                        text += err.message;
-                        text += "\n     | \n";
-                        text += pos.ln.toString().padStart(4) + " | " + lines[pos.ln - 1] + "\n";
+//     //                     let text = (++i) + ". ";
+//     //                     text += err.message;
+//     //                     text += "\n     | \n";
+//     //                     text += pos.ln.toString().padStart(4) + " | " + lines[pos.ln - 1] + "\n";
                         
-                        text += "     | ";
-                        for (let i = 0; i < pos.col - 1; i++) {
-                            text += " ";
-                        }
-                        for (let i = 0; i < length; i++) {
-                            text += "^"
-                        }
-                        text += "";
+//     //                     text += "     | ";
+//     //                     for (let i = 0; i < pos.col - 1; i++) {
+//     //                         text += " ";
+//     //                     }
+//     //                     for (let i = 0; i < length; i++) {
+//     //                         text += "^"
+//     //                     }
+//     //                     text += "";
             
-                        console.log(text);
-                    }
-                    else {
-                        console.log((++i) + ". " + (err.message || err));
-                    }
-                }
-                else {
-                    console.log((++i) + ". " + (err.stack || err));
-                }
-            }
-            catch {
-                console.log("There was an error displaying this error. Here is an uglier version of the error:");
-                console.log(err);
-            }
-        }
-        return;
-    }
+//     //                     console.log(text);
+//     //                 }
+//     //                 else {
+//     //                     console.log((++i) + ". " + (err.message || err));
+//     //                 }
+//     //             }
+//     //             else {
+//     //                 console.log((++i) + ". " + (err.stack || err));
+//     //             }
+//     //         }
+//     //         catch {
+//     //             console.log("There was an error displaying this error. Here is an uglier version of the error:");
+//     //             console.log(err);
+//     //         }
+//     //     }
+//     //     return;
+//     // }
 
-    // types.dump();
-    // console.log(JSON.stringify(types.scopes, null, 2));
-    // console.log(txt);
+//     // types.dump();
+//     // console.log(JSON.stringify(types.scopes, null, 2));
+//     // console.log(txt);
 
-    // console.log(mappings);
-    fs.writeFileSync(outputFile, txt);
-}
+//     // console.log(mappings);
+//     fs.writeFileSync(outputFile, txt);
+// }
 
 // compile(INPUT_FILE, OUTPUT_FILE);
 
+const getFileMappings = () => mappings;
+
 exports.emit = emit;
+exports.getFileMappings = getFileMappings;

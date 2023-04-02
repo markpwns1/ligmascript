@@ -25,12 +25,14 @@ const STRING_ESCAPES = [
 exports.Scanner = class Scanner {
     offset = 0;
     source;
+    filename;
 
     token(type, extra) {
         return new token.Token(type, extra);
     }
 
     scanFile(filename) {
+        this.filename = filename;
         return this.scan(fs.readFileSync(filename, "utf-8"));
     }
 
@@ -49,6 +51,7 @@ exports.Scanner = class Scanner {
                 if(t) {
                     const pos = this.posFromOffset(o);
                     t.pos = {
+                        filename: this.filename,
                         length: this.offset - o,
                         offset: o,
                         ...pos
@@ -95,7 +98,8 @@ exports.Scanner = class Scanner {
         const pos = this.posFromOffset();
         eof.pos = {
             offset: this.offset,
-            ...pos
+            ...pos,
+            filename: this.filename
         };
     
         tokens.push(eof);
@@ -217,6 +221,7 @@ exports.Scanner = class Scanner {
         const error = Error("SYNTAX ERROR @ Ln " + pos.ln + ", col " + pos.col + " -- " + text);
         error.type = "scanner";
         error.rawMessage = text;
+        error.filename = this.filename;
         error.offset = overrideOffset || this.offset;
         error.pos = pos;
         error.length = 1;
@@ -239,7 +244,10 @@ exports.Scanner = class Scanner {
     
             if(match) {
                 this.skip(s.length);
-                return this.token(SYMBOLS[s], { friendlyName: "'" + s + "'" });
+                return this.token(SYMBOLS[s], { 
+                    value: s,
+                    friendlyName: "'" + s + "'" 
+                });
             }
         }
     

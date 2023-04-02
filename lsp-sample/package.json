@@ -17,7 +17,7 @@
 		"vscode": "^1.63.0"
 	},
 	"activationEvents": [
-		"onLanguage:jammy"
+		"onLanguage:ligmascript"
 	],
 	"main": "./client/out/extension",
 	"contributes": {
@@ -46,17 +46,17 @@
 		},
 		"languages": [
             {
-                "id": "jammy",
-                "aliases": [ "Jammy", "jammy"],
-                "extensions": [ ".jam" ],
+                "id": "ligmascript",
+                "aliases": [ "Ligmascript", "ligmascript"],
+                "extensions": [ ".li" ],
                 "configuration": "./language-configuration.json"
             }
         ],
         "grammars": [
             {
-                "language": "jammy",
-                "scopeName": "source.jammy",
-                "path": "./syntaxes/jammy.tmLanguage.json"
+                "language": "ligmascript",
+                "scopeName": "source.ligmascript",
+                "path": "./syntaxes/ligmascript.tmLanguage.json"
             }
         ]
 	},

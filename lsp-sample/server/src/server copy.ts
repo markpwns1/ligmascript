@@ -68,6 +68,25 @@ let currentFileDefinitions: SemanticInfo = {
 
 let intrinsics: Definition[] = semanticAnalyser.INTRINSICS.map((name: any) => ({ name: name, type: "function" }));
 
+// [
+// 	{ name: "unpack", type: "function" },
+// 	{ name: "concat", type: "function" },
+// 	{ name: "len", type: "function" },
+// 	{ name: "nop", type: "function" },
+// 	{ name: "range", type: "function" },
+// 	{ name: "is_subclass", type: "function" },
+// 	{ name: "proto", type: "function" },
+// 	{ name: "extend", type: "function" },
+// 	{ name: "last", type: "function" },
+// 	{ name: "body", type: "function" },
+// 	{ name: "pairs", type: "function" },
+// 	{ name: "panic", type: "function" },
+// 	{ name: "identity", type: "function" },
+// 	{ name: "count", type: "function" },
+// 	{ name: "overwrite", type: "function" },
+// 	{ name: "symbol", type: "function" },
+// ];
+
 let importedFiles: { [filename: string]: SemanticInfo[] } = { };
 let currentFile: string;
 
@@ -270,7 +289,7 @@ function getDefsInFile(filename, parser) {
 			beginLn: x.token.pos.ln,
 			beginCol: x.token.pos.col,
 			endLn: x.token.pos.ln,
-			endCol: x.token.pos.col + x.token.pos.length
+			endCol: x.token.pos.ln + x.token.pos.length
 		})));
 	}
 	// for (const def of ast.definitions) {
@@ -303,102 +322,67 @@ function getDefsInFile(filename, parser) {
 	return ast;
 }
 
-let backgroundData = {
-	// errors: [ ],
-	// warnings: [ ],
-	variables: [ ],
-}
-
-let semanticTokens;
-
-let analysisInfo;
-
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
-	// const settings = await getDocumentSettings(textDocument.uri);
+	// In this simple example we get the settings for every validate run.
+	const settings = await getDocumentSettings(textDocument.uri);
 
-	const decodedURI = decodeURIComponent(textDocument.uri);
-	const filepath = path.normalize(decodedURI.startsWith("file:")? decodedURI.substring(8) : decodedURI);
+	// The validator creates diagnostics for all uppercase words length 2 and more
 	const text = textDocument.getText();
+	// const pattern = /\b[A-Z]{2,}\b/g;
+	// let m: RegExpExecArray | null;
+
+	// let problems = 0;
+	const diagnostics: Diagnostic[] = [];
+
+	// for (const iterator of object) {
+		
+	// }
+
 	const scanner = new Scanner().scan(text);
-    const parser = new Parser(filepath, scanner.tokens);
+    const parser = new Parser(scanner.tokens);
 
-	let toReport;
-	if(currentFile == textDocument.uri) {
-		console.log("Updating file: " + textDocument.uri);
-		analysisInfo = semanticAnalyser.analyse(filepath, parser.program(), true, backgroundData.variables);
-
-		toReport = [
-			// ...backgroundData.errors,
-			...analysisInfo.errors,
-			// ...backgroundData.warnings,
-			...analysisInfo.warnings
-		];
-	}
-	else {
-		console.log("Loading project at root: " + textDocument.uri);
-		currentFile = textDocument.uri;
-
-		analysisInfo = semanticAnalyser.analyse(decodeURIComponent(filepath), parser.program(), false);
-		
-		// backgroundData.errors = analysisInfo.backgroundErrors;
-		// backgroundData.warnings = analysisInfo.backgroundWarnings;
-		backgroundData.variables = analysisInfo.backgroundVariables;
-		
-		toReport = [ 
-			...analysisInfo.backgroundErrors, 
-			...analysisInfo.errors, 
-			...analysisInfo.backgroundWarnings, 
-			...analysisInfo.warnings 
-		];
-	}
-
-	// semanticTokens = info.semanticTokens.map(x => ({
-
-	const diagnosticsPerFile = { };
-		
-	for(const error of toReport) {
-
-		const range = error.pos? {
-			start: textDocument.positionAt(error.pos.offset),
-			end: textDocument.positionAt(error.pos.offset + (error.length || error.pos.length))
-		} : {
-			start: textDocument.positionAt(0),
-			end: textDocument.positionAt(1)
-		};
-
-		const diagnostic: Diagnostic = {
-			severity: error.isWarning? DiagnosticSeverity.Warning : DiagnosticSeverity.Error,
-			range: range,
-			message: error.rawMessage,
-			source: "ligmascript",
-		};
-
-		if(!diagnosticsPerFile[error.filename]) diagnosticsPerFile[error.filename] = [ ];
-		diagnosticsPerFile[error.filename].push(diagnostic);
+	
+	currentFileDefinitions = {
+		semanticTokens: [ ],
+		definitions: [ ]
 	};
 
-	let localDiagnosticsUpdated = false;
-	for (const file of Object.keys(diagnosticsPerFile)) {
-		const fp = path.normalize(file);
-		const t = "file:///" + path.normalize(file);
-		if(fp == filepath) localDiagnosticsUpdated = true;
-		connection.sendDiagnostics({ uri: t, diagnostics: diagnosticsPerFile[file] });
+	imports = new Set<string>();
+
+	const ast = getDefsInFile(textDocument.uri, parser);
+
+	const keys = Object.keys(importedFiles);
+	for (const imp of keys) {
+		if(!imports.has(imp)) importedFiles[imp] = {
+			semanticTokens: [ ],
+			definitions: [ ]
+		};
 	}
 
-	if(!localDiagnosticsUpdated) {
-		connection.sendDiagnostics({ uri: textDocument.uri, diagnostics: [ ] });
+	if(ast.errors.length > 0) {
+		for (const error of ast.errors) {
+
+			if(!error.pos) continue;
+			
+			const length = error.length || error.pos.length || 1;
+
+			const diagnostic: Diagnostic = {
+				severity: error.isWarning? DiagnosticSeverity.Warning : DiagnosticSeverity.Error,
+				range: {
+					start: textDocument.positionAt(error.pos.offset),
+					end: textDocument.positionAt(error.pos.offset + length)
+				},
+				message: error.rawMessage,
+				source: "ligmascript"
+			};
+
+			diagnostics.push(diagnostic);
+		}
 	}
 	
 	// Send the computed diagnostics to VSCode.
-	// connection.sendDiagnostics({ uri: textDocument.uri, diagnostics: diagnostics });
-	// console.log(analysisInfo.semanticTokens.length);
-	connection.sendNotification("ligmascript/semantictokenupdate", analysisInfo.semanticTokens.map(x => ({
-		type: x.type,
-		beginLn: x.token.pos.ln,
-		beginCol: x.token.pos.col,
-		endLn: x.token.pos.ln,
-		endCol: x.token.pos.col + x.token.pos.length
-	})));
+	connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+	connection.sendNotification("ligmascript/semantictokenupdate", getSemanticTokens());
 }
 
 connection.onDidChangeWatchedFiles(_change => {
@@ -426,13 +410,14 @@ connection.onCompletion(
 		// ];
 		const completions: CompletionItem[] = [ ];
  
-		const defs = [ ...backgroundData.variables, ...analysisInfo.variables ];
+		const defs = [ ...currentFileDefinitions.definitions, ...intrinsics ];
+		const importedFilenames = Object.keys(importedFiles);
+		for (const file of importedFilenames) {
+			defs.push(...importedFiles[file].definitions);
+		}
 
 		for (let i = 0; i < defs.length; i++) {
 			const x = defs[i];
-
-			if(x.name == "_" || !x.global) continue;
-
 			completions.push({
 				label: x.name,
 				kind: x.type == "function"? CompletionItemKind.Function : CompletionItemKind.Variable,
@@ -463,18 +448,16 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
 // for open, change and close text document events
 documents.listen(connection);
 
-// function getSemanticTokens() {
-// 	// const toks = [ ...currentFileDefinitions.semanticTokens ];
-// 	// const importedFilenames = Object.keys(importedFiles);
-// 	// for (const file of importedFilenames) {
-// 	// 	toks.push(...importedFiles[file].semanticTokens);
-// 	// }
-// 	// // console.log("TOKENS");
-// 	// // console.log(toks);
-// 	// return toks;
-
-// 	return analysisInfo.semanticTokens;
-// }
+function getSemanticTokens() {
+	const toks = [ ...currentFileDefinitions.semanticTokens ];
+	const importedFilenames = Object.keys(importedFiles);
+	for (const file of importedFilenames) {
+		toks.push(...importedFiles[file].semanticTokens);
+	}
+	// console.log("TOKENS");
+	// console.log(toks);
+	return toks;
+}
 
 // Listen on the connection
 connection.listen();
