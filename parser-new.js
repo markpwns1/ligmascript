@@ -205,6 +205,98 @@ class Parser {
         }
     }
 
+    destructPattern(exportsAllowed) {
+        const c = this.peek();
+        switch(c.type) {
+            case "open_curly": return this.destructTable(exportsAllowed);
+            case "open_square": return this.destructArray(exportsAllowed);
+            default: return this.destructVariable(exportsAllowed);
+        }
+    }
+
+    destructVariable(exportsAllowed) {
+        const isExport = this.isKeyword("export");
+        if(isExport) {
+            this.keyword("export");
+        }
+        const name = this.eat("identifier");
+        if(isExport) {
+            this.exports.push(name);
+            if(!exportsAllowed) 
+                throw this.generateError("Cannot export local variables", name);
+        }
+        return ast("destruct_variable", name, name, {
+            name: name.value,
+            isExport: isExport
+        });
+    }
+
+    destructArray(exportsAllowed) {
+        const begin = this.eat();
+        const head = this.listOf(this.destructPattern.bind(this, exportsAllowed), "ellipses", "close_square");
+        let tail;
+        if(head.end.type == "ellipses") {
+            tail = this.listOf(this.destructPattern.bind(this, exportsAllowed), "close_square");
+        }
+        const tailElements = tail? tail.elements : [ ];
+        return ast("destruct_array", begin, tail? tail.end : head.end, {
+            head: head.elements,
+            tail: tailElements
+        });
+    }
+
+    destructTableElement(exportsAllowed) {
+        const begin = this.peek();
+
+        // [export] .foo
+        if(this.isKeyword("export") || begin.type == "dot") {
+            const isExport = this.isKeyword("export");
+            if(isExport) {
+                this.keyword("export");
+            }
+            this.eat("dot");
+            const name = this.eat("identifier");
+            if(isExport) {
+                this.exports.push(name);
+            }
+            return ast("destruct_table_element", begin, name, {
+                name: name.value,
+                index: ast("string", name, name, {
+                    value: name.value
+                }),
+                isExport: isExport
+            });
+        }
+        // [export] foo <- .field
+        // [export] foo <- "expression"
+        else {
+            const pattern = this.destructPattern(exportsAllowed);
+            this.eat("left_thin_arrow");
+            let index;
+            if(this.peek().type == "dot") {
+                this.eat("dot");
+                const field = this.eat("identifier");
+                index = ast("string", field, field, {
+                    value: field.value
+                });
+            }
+            else {
+                index = this.expression();
+            }
+            return ast("destruct_table_element", begin, index.lastToken, {
+                name: pattern.name,
+                index: index,
+            });
+        }
+    }
+
+    destructTable() {
+        const begin = this.eat();
+        const elements = this.listOf(this.destructTableElement.bind(this), "close_curly");
+        return ast("destruct_table", begin, elements.end, {
+            elements: elements.elements
+        });
+    }
 
     program() {
 

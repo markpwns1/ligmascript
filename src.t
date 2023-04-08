@@ -502,3 +502,13 @@ main()
 --     print "Well, it was nice seeing you, ${x}!"
 -- end
 
+let 
+    [ 
+        { .x, .y },
+        [ a, b, c ],
+        d,
+        ...
+        { q <- .field },
+        { { .n, .m } <- .field },
+        { [i, j, k] <- .field }
+    ]
