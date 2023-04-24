@@ -16,19 +16,19 @@
 					"include": "#keywords"
 				},
 				{
-					"include": "#selftype"
+					"include": "DISABLED #selftype"
 				},
 				{
-					"include": "#functypes"
+					"include": "DISABLED #functypes"
 				},
 				{
-					"include": "#classdef"
+					"include": "DISABLED #classdef"
 				},
 				{
-					"include": "#funccall_excl"
+					"include": "DISABLED #funccall_excl"
 				},
 				{
-					"include": "#funccall"
+					"include": "DISABLED #funccall"
 				},
 				{
 					"include": "#members"
@@ -58,7 +58,7 @@
 					"include": "#objindex"
 				},
 				{
-					"include": "#arrayindex"
+					"include": "DISABLED #arrayindex"
 				}
 			]
 		},

@@ -118,6 +118,8 @@ exports.Scanner = class Scanner {
             return;
         }
 
+        // if(c == "`" && this.peek(1) == "{") {
+
         if(c == "-" && this.peek(1) == "-") {
             if(this.peek(2) == "[") {
                 this.skip(3);
@@ -145,7 +147,7 @@ exports.Scanner = class Scanner {
             const name = this.identifier();
             return this.token("selfindex", { 
                 value: name.value,
-                friendlyName: "@" + name
+                friendlyName: "@" + name.value
             });
         }
     
@@ -293,6 +295,28 @@ exports.Scanner = class Scanner {
         });
     }
 
+    raw() {
+        this.eat();
+
+        let val = "";
+        while(this.peek() != "`" && this.peek() != "\0") {
+            const c = this.peek();
+
+            if(c == "\\") {
+                this.eat();
+            }
+
+            val += this.eat();
+        }
+
+        this.eat("`");
+
+        return this.token("raw", {
+            value: val,
+            friendlyName: "raw Lua code",
+        });
+    }
+
     string() {
         this.eat();
     
@@ -326,18 +350,6 @@ exports.Scanner = class Scanner {
                 if(scanned.errors.length > 0) {
                     throw scanned.errors;
                 }
-                // let innerTokens;
-                // try {
-                //     innerTokens = 
-                    
-                // } catch (err) {
-                //     const errors = [ ];
-                //     for (const e of err) {
-                //         errors.push(this.generateError(e.rawMessage, offsetBefore + e.offset));
-                //     }
-                //     throw errors;
-                // }
-
                 for (const t of innerTokens) {
                     t.pos.offset += offsetBefore;
                     const pos = this.posFromOffset(t.pos.offset);

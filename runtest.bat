@@ -1,1 +1,1 @@
-node index.js "test2/a.jam" & cd "test2/out" & lua "a.lua"
+node index.js "test2/a.li" & cd "test2/out" & lua "a.lua"

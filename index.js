@@ -70,14 +70,22 @@ end
 
 function extend(__super, __proto) return proto(__proto, __super) end
 
+function head(a) return a[1] end
+function slice(a, start, finish, step) 
+    local b = setmetatable({}, getmetatable(a))
+    for i=start,finish,step do b[#b+1]=a[i] end
+    return b
+end
+function tail(a) return slice(a, 2, #a, 1) end
+
 function last(a) return a[#a] end
 function body(a) 
-    local b = {} 
+    local b = setmetatable({}, getmetatable(a)) 
     for i=1,#a-1 do b[i]=a[i] end 
     return b 
 end
 
-function pairs(t)
+function pairset(t)
     local keyset = {}
     for k, v in __pairs(t) do keyset[#keyset+1] = {k, v} end
     return keyset
@@ -113,17 +121,29 @@ end
 
 function __not(x) return not x end
 
+__is_love2d = not not love
+
 function import(path)
     local dir_begin, dir_end = path:find("[/\\\\]")
     local dir = path:sub(1, dir_end or 0)
     local ext_begin, ext_end = path:find("%.[^%.]*$")
     local ext = path:sub((ext_begin or 0) + 1, (ext_end or 0))
     local file_without_ext = path:sub((dir_end or 0) + 1, (ext_begin or 0) - 1)
-    local old = package.path
+    local old0 = package.path
+    local old1
+    if __is_love2d then 
+        old1 = love.filesystem.getRequirePath() 
+    end
     if dir == "" then dir = "." end
     package.path = dir .. "/?." .. ext
+    if __is_love2d then
+        love.filesystem.setRequirePath(dir .. "/?." .. ext)
+    end
     local x = require(file_without_ext)
-    package.path = old
+    package.path = old0
+    if __is_love2d then
+        love.filesystem.setRequirePath(old1)
+    end
     return x
 end
 
@@ -138,31 +158,47 @@ local function normalise_path(path)
     return path
 end
 
-local function __replace_line_numbers(str)
-    local filename, line, message = str:match("([^%s]-):(%d+): (.+)")
-    if not filename then return str end
-    local template = string.gsub(str, "([^%s]-):(%d+): (.+)", "%%s:%%s: %%s")
+local function __lookup_mapping(filename, line)
     local file_mappings = __mappings[normalise_path(string.trim(filename))]
     local src_filename = __filename_mappings[normalise_path(string.trim(filename))]
     if file_mappings and file_mappings[tonumber(line)] then 
-        return string.format(template, src_filename, file_mappings[tonumber(line)], message)
-    else return str end
+        return src_filename, file_mappings[tonumber(line)]
+    else 
+        return filename, line
+    end
+end
+
+local function __replace_line_numbers(str)
+    local filename, line, message, filename2, line2 = str:match("([^%s]-):(%d+): ([^<]+)<([^%s]-):(%d+)>")
+    if filename then 
+        local src_filename, src_line = __lookup_mapping(filename, line)
+        local src_filename2, src_line2 = __lookup_mapping(filename2, line2)
+        local template = string.gsub(str, "([^%s]-):(%d+): ([^<]+)<([^%s]-):(%d+)>", "%%s:%%s: %%s<%%s:%%s>")
+        return string.format(template, src_filename, src_line, message, src_filename2, src_line2)
+    else
+        local filename, line, message = str:match("([^%s]-):(%d+): (.+)")
+        if not filename then return str end
+        local src_filename, src_line = __lookup_mapping(filename, line)
+        local template = string.gsub(str, "([^%s]-):(%d+): (.+)", "%%s:%%s: %%s")
+        return string.format(template, src_filename, src_line, message)
+    end
+end
+
+local function magiclines(s)
+    if s:sub(-1)~="\\n" then s=s.."\\n" end
+    return s:gmatch("(.-)\\n")
+end
+
+local function __handle_error(err)
+    io.write("ligmascript: ")
+    for line in magiclines(debug.traceback(err, 2)) do
+        print(__replace_line_numbers(line))
+    end
+    os.exit(1)
 end
 
 function __report_error(f)
-    local success, result = pcall(f)
-    if success then return success 
-    else
-        local function magiclines(s)
-            if s:sub(-1)~="\\n" then s=s.."\\n" end
-            return s:gmatch("(.-)\\n")
-        end
-        io.write("ligmascript: ")
-        for line in magiclines(debug.traceback(result, 2)) do
-            print(__replace_line_numbers(line))
-        end
-        os.exit(1)
-    end
+    return xpcall(f, __handle_error)
 end
 
 main = nop
@@ -189,7 +225,7 @@ let toWrite = [ ];
 
 const compileFile = (filename, isEntryPoint) => {
     const scanned = new Scanner().scanFile(filename);
-    const parsed = new Parser(scanned.tokens).program();
+    const parsed = new Parser(filename, scanned.tokens).program();
 
     for(const i of parsed.imports) {
         compileFile(path.join(path.dirname(filename), i.value));
@@ -201,7 +237,7 @@ const compileFile = (filename, isEntryPoint) => {
         totalErrors.push(...emitted.errors);
     }
     else {
-        toWrite.push({ filename: luafyFilename(filename), source: (isEntryPoint? 'require("__mappings") require("__runtime") ' : "") + "__report_error(function() " + emitted.lua + " end)"});
+        toWrite.push({ from: filename, to: luafyFilename(filename), source: (isEntryPoint? 'require("__mappings") require("__runtime") ' : "") + emitted.lua});
     }
 }
 
@@ -217,7 +253,16 @@ if(totalErrors.length > 0) {
     console.log(totalErrors.length + " ERRORS:");
     let i = 0;
     for (const err of totalErrors) {
-        console.log((++i) + ". " + err);
+        throw err;
+        // console.log((++i) + ". " + err);
+    }
+}
+
+if(analysed.warnings.length > 0) {
+    console.log(analysed.warnings.length + " WARNINGS:");
+    let i = 0;
+    for (const warn of analysed.warnings) {
+        console.log((++i) + ". " + warn.message);
     }
 }
 
@@ -265,34 +310,57 @@ if(totalErrors.length > 0) {
 //     return;
 // }
 
-if(fs.existsSync(OUTPUT_DIR))
-    fs.rmSync(OUTPUT_DIR, { recursive: true });
-fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+// if(fs.existsSync(OUTPUT_DIR))
+//     fs.rmSync(OUTPUT_DIR, { recursive: true });
+// fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+
+function writeFileAndDirs(filepath, data, oncomplete) {
+    const dirname = path.dirname(filepath);
+    fs.mkdir(dirname, { recursive: true }, err => {
+        if(err) {
+            console.log(err);
+            return;
+        }
+
+        fs.writeFile(filepath, data, err => {
+            if(err) {
+                console.log(err);
+            }
+            else {
+                oncomplete();
+            }
+        });
+    });
+}
 
 fileMappings = emitter.getFileMappings();
 
 for (const file of toWrite) {
-    fs.writeFile(path.join(OUTPUT_DIR, path.relative(INPUT_DIR, file.filename)), file.source, err => {
+    const outFilename = path.join(OUTPUT_DIR, path.relative(INPUT_DIR, file.to));
+    writeFileAndDirs(outFilename, file.source, err => {
         if(err) {
             console.log(err);
         }
-        else console.log("Compiled " + file.filename + " successfully.");
+        else console.log("\"" + path.normalize(file.from) + "\" => \"" + outFilename + "\" ... OK.");
     });
 }
 
 const fileMappingsSource = 
     "__mappings = {\n" + Object.keys(fileMappings).map(filename => '    ["' + luafyFilename(filename).replace(/\\/g, "/") + '"] = {\n' + Object.keys(fileMappings[filename]).map(from => "        [" + from + "] = " + fileMappings[filename][from]).join(",\n") + '\n    }').join(",\n") + "\n}"
     + "\n__filename_mappings = {\n" + Object.keys(fileMappings).map(filename => '    ["' + luafyFilename(filename).replace(/\\/g, "/") + '"] = "' + filename.replace(/\\/g, "/") + '"').join(",\n") + "\n}";
-fs.writeFile(path.join(OUTPUT_DIR, "__mappings.lua"), fileMappingsSource, err => {
+
+const mappingsFilename = path.join(OUTPUT_DIR, "__mappings.lua");
+writeFileAndDirs(mappingsFilename, fileMappingsSource, err => {
     if(err) {
         console.log(err);
     }
-    else console.log("Successfully generated line mappings.");
+    else console.log("\"" + mappingsFilename + "\" ... OK.");
 });
 
-fs.writeFile(path.join(OUTPUT_DIR, "__runtime.lua"), preamble, err => {
+const runtimeFilename = path.join(OUTPUT_DIR, "__runtime.lua");
+writeFileAndDirs(runtimeFilename, preamble, err => {
     if(err) {
         console.log(err);
     }
-    else console.log("Successfully generated runtime.");
+    else console.log("\"" + runtimeFilename + "\" ... OK.");
 });

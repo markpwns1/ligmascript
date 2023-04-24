@@ -1,4 +1,5 @@
 DONE 1. replace export statement with let export ... = ...
-2. first-class let-destructuring, general let rewrite
+DONE 2. first-class let-destructuring, general let rewrite
+2.1 codegen for (2)
 3. a mechanism for module returns
 4. fix code generation probably

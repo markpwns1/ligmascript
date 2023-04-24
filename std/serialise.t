@@ -1,7 +1,7 @@
 
 import "preamble"
 
-let serialise_table = \t -> 
+let export serialise_table = \t -> 
     let serialise_table_kv = \kv ->
         let n = len kv in cases
             | n == 0, ""
@@ -11,13 +11,13 @@ let serialise_table = \t ->
                 "${serialise k}: ${serialise v}, ${serialise_table_kv (tail kv)}"
     in "{ ${serialise_table_kv (pairs t)} }"
 
-let array_join = \a, sep = ", ", transformer = serialise ->
+let export array_join = \a, sep = ", ", transformer = serialise ->
     let n = len a in cases
         | n == 0, ""
         | n == 1, transformer (head a) 
         | else, transformer (head a) .. sep .. array_join (tail a) sep transformer
 
-let serialise = \x -> 
+let export serialise = \x -> 
     let T = type x in cases
         | T == "nil", "nil"
         | T == "number", tostring x
@@ -31,5 +31,3 @@ let serialise = \x ->
             | (getmetatable x) & (getmetatable x).__tostring, tostring(x)
             | else, serialise_table x
         | else, panic!
-
-export serialise, array_join

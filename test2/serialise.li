@@ -1,0 +1,38 @@
+
+import "preamble.li"
+
+let serialise_pair = \p, visited -> 
+    let [ k, v ] = p in "${serialise k visited} = ${serialise v visited}"
+
+let serialise_table = \t, visited -> 
+    let [ p, n ] = [ pairset t, len p ] in cases
+    | n == 0 -> "{}"
+    | else -> "{ ${string.join (map p \x -> serialise_pair x visited) ", " } }"
+
+let serialise_object = \x, visited -> 
+    let obj = cases
+        | is_array x -> "[ ${string.join (map x \x -> serialise x visited) ", " } ]"
+        | (getmetatable x)?.__tostring -> tostring x
+        | else -> serialise_table x visited
+    in "(${tostring x}) ${obj}"
+
+let export serialise = \x, visited = [] -> match type x
+    | "nil" -> "nil"
+    | "number" | "boolean" -> tostring x
+    | "string" -> "\"${x}\""
+    | "function" -> "<function>"
+    | "CFunction" -> "<cfunction>"
+    | "userdata" -> "<userdata>"
+    | "table" -> 
+        if member visited x 
+        then "(recursive) (${tostring x})"
+        else do set visited #(len visited + 1) = x
+        then serialise_object x visited
+    | else -> panic!
+        
+let show_one = \x -> match type x 
+    | "table" -> serialise_object x [x]
+    | else -> x
+
+let export show = \x... -> 
+    print (... map x show_one)

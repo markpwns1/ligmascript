@@ -1,55 +1,55 @@
-require("__mappings") require("__runtime") __report_error(function() local q,a,c,__while,main 
-q = 
-69 
-local __t = 
-{[
-"a"]=
-1,[
-"b"]=
-2,[
-"c"]=
-3};a = __t[
-"a"];c = __t[
-"c"] 
-__while = 
-function(cond,body)  
-if 
+require("__mappings") require("__runtime") local any,main 
 
-cond(
-(nil)) then 
+local 
+function any(a,f)  
+while true do 
+
+if type(a) ~= "table" or #a ~= 0 then break end return 
+false end while true do 
 
 
-body(
-(nil));
 
-__while(
-cond,
-body) else return 
-(nil) end end 
-main = 
-function()  
-
-
-i = 
-0;
-
-__while(
-function()  return 
+local x = 
+a[1] if (x == nil) then break end  local xs = slice(a, 2, #a, 1) return 
 (
-i<
-10) end,
-function()  
+
+f(
+x) or 
+
+any(
+xs,
+f)) end return 
+
+panic(
+(nil))  end 
+
+local 
+function main()  
+
+
+local a;a = 
+{
+1,
+2,
+3,
+4,
+5};
 
 
 print(
-i);
 
-i = 
+any(
+a,
+function (self)  return 
 (
-i+
-1) end);
+self>
+3) end));
 
 print(
 
-
-x.y.z) end main() end)
+any(
+a,
+function (self)  return 
+(
+self>
+5) end)) end __report_error(main)

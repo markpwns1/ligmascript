@@ -313,8 +313,11 @@ let semanticTokens;
 
 let analysisInfo;
 
+let currentDoc;
+
 async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 	// const settings = await getDocumentSettings(textDocument.uri);
+	currentDoc = textDocument;
 
 	const decodedURI = decodeURIComponent(textDocument.uri);
 	const filepath = path.normalize(decodedURI.startsWith("file:")? decodedURI.substring(8) : decodedURI);
@@ -406,9 +409,27 @@ connection.onDidChangeWatchedFiles(_change => {
 	connection.console.log('We received an file change event');
 });
 
+function leq(a: { ln: number, col: number }, b: { ln: number, col: number }) {
+	return a.ln < b.ln || (a.ln == b.ln && a.col <= b.col);
+}
+
+function within(a: { ln: number, col: number }, b: { ln: number, col: number }, c: { ln: number, col: number }) {
+	return leq(a, b) && leq(b, c);
+}
+
+const varTypeToKind = {
+	"function": CompletionItemKind.Function,
+	"variable": CompletionItemKind.Variable,
+	"class": CompletionItemKind.Class
+}
+
 // This handler provides the initial list of the completion items.
 connection.onCompletion(
 	(_textDocumentPosition: TextDocumentPositionParams): CompletionItem[] => {
+		let pos = {
+			ln: _textDocumentPosition.position.line + 1,
+			col: _textDocumentPosition.position.character + 1
+		};
 		// The pass parameter contains the position of the text document in
 		// which code complete got requested. For the example we ignore this
 		// info and always provide the same completion items.
@@ -430,12 +451,16 @@ connection.onCompletion(
 
 		for (let i = 0; i < defs.length; i++) {
 			const x = defs[i];
+			// if(x.name == "b")
+			// console.log(x);
 
-			if(x.name == "_" || !x.global) continue;
+			if(x.name == "_"/* || !x.global*/) continue;
+			if(!x.global && x.scope && !x.scope.fake && !within(x.scope.firstToken.pos, pos, x.scope.lastToken.pos)) 
+				continue;
 
 			completions.push({
 				label: x.name,
-				kind: x.type == "function"? CompletionItemKind.Function : CompletionItemKind.Variable,
+				kind: varTypeToKind[x.type] || CompletionItemKind.Variable,
 				data: i
 			});
 		}

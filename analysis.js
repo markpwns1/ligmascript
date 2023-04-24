@@ -30,6 +30,7 @@ const INTRINSIC_FUNCTIONS = [
     "len",
     "nop",
     "symbol",
+    "unset",
     "overwrite",
     "is_subclass",
     "get_empty_table",
@@ -38,11 +39,18 @@ const INTRINSIC_FUNCTIONS = [
     "last",
     "body",
     "pairs",
+    "ipairs",
+    "pairset",
     "panic",
     "identity",
     "count",
+    "modify",
     "type",
-    "print"
+    "print",
+    "head",
+    "tail",
+    "tostring",
+    "getmetatable",
 ];
 
 const walk = (ast, ...settings) => {
@@ -60,7 +68,7 @@ const generateError = (ast, msg, warning = false) => {
 
     if(ast && ast.firstToken && ast.firstToken.pos && ast.lastToken && ast.lastToken.pos) {
         const pos = ast.firstToken.pos;
-        const e = Error(txt + " @ Ln " + pos.ln + ", col " + pos.col + " -- " + msg);
+        const e = Error(txt + " @ " + currentFile + ", ln " + pos.ln + ", col " + pos.col + " -- " + msg);
         e.type = "semantic";
         e.rawMessage = msg;
         e.filename = currentFile;
@@ -81,7 +89,12 @@ const generateError = (ast, msg, warning = false) => {
     }
 }
 
-const typeOfAST = ast => (ast != null && ast.type == "function")? "function" : "variable";
+const typeOfAST = ast => {
+    if(ast == null) return "variable";
+    if(ast.type == "function") return "function";
+    if(ast.type == "application" && ast.f.type == "variable" && ast.f.name == "proto") return "class";
+    return "variable";
+}
 
 const getVariable = (name, offset) => {
     if(!name) return null;
@@ -89,7 +102,7 @@ const getVariable = (name, offset) => {
     const candidates = variables.filter(x => 
         x.name == name 
         && ((x.global && x.scope == null) || 
-            (x.scope && x.scope.firstToken.pos.offset <= offset && offset <= x.scope.lastToken.pos.offset))
+            (x.scope && x.scope.firstToken.pos.offset <= offset && offset <= (x.scope.lastToken.pos.offset + x.scope.lastToken.pos.length)))
         );
     let deepest = -1;
     let found;
@@ -100,11 +113,11 @@ const getVariable = (name, offset) => {
     return found || backgroundVariables.find(x => x.name == name);
 }
 
-const addSemanticToken = (tok, associatedVariable) => {
+const addSemanticToken = (tok, associatedVariable, customType) => {
     
     if (tok.value == "_" || tok.value == "@") return;
 
-    if(!associatedVariable) {
+    if(!customType && !associatedVariable) {
         associatedVariable = getVariable(tok.value, tok.pos.offset);
 
         if(associatedVariable)
@@ -112,7 +125,7 @@ const addSemanticToken = (tok, associatedVariable) => {
     }
     
     semanticTokens.push({
-        type: associatedVariable? associatedVariable.type : "variable",
+        type: customType || (associatedVariable? associatedVariable.type : "variable"),
         name: tok.value,
         filename: currentFile,
         reference: associatedVariable,
@@ -136,11 +149,13 @@ const decVariable = (ast, name, global, scope, value, createSemTok = true) => {
     v.name = name.value;
     v.global = !! global;
     v.scope = global? null : scope;
+    if(!global && !scope)
+        throw Error("Internal error: non-global variable without scope");
     v.type = typeOfAST(value);
     v.ast = ast;
     v.range = range;
     variables.push(v);
-
+    
     if(createSemTok)
         addSemanticToken(name, v);
 
@@ -156,7 +171,16 @@ analyser.walkers.parenthesised = ast => walk(ast.inner);
 analyser.walkers.array = ast => ast.elements.forEach(walk);
 analyser.walkers.table = ast => ast.elements.forEach(x => { walk(x.index); walk(x.value); });
 analyser.walkers.method_call = ast => { walk(ast.table); ast.args.forEach(walk); };
-analyser.walkers.application = ast => { walk(ast.f); ast.args.forEach(walk); };
+analyser.walkers.application = ast => { 
+    if(ast.f.type == "variable") {
+        addSemanticToken(ast.f.firstToken, null, "function");
+    }
+    else if(ast.f.type == "property") {
+        addSemanticToken(ast.f.name, null, "function");
+    }
+    walk(ast.f); 
+    ast.args.forEach(walk); 
+};
 analyser.walkers.assignment = ast => { walk(ast.left); walk(ast.right); };
 analyser.walkers.nullco = ast => walk(ast.table);
 analyser.walkers.property = ast => walk(ast.table);
@@ -183,69 +207,107 @@ analyser.walkers.try_expr = ast => {
     if(ast.false_branch) walk(ast.false_branch);
 }
 
-analyser.walkers.simple_def = (ast, settings) => {
+analyser.walkers.match_expression = ast => walk(ast.expression);
 
-    if(settings?.topLevelScanningPass == settings?.global) {
-        // console.log(ast);
-        const v = decVariable(ast, ast.name, settings?.global, ast.value, ast.value);
-        if(!settings?.topLevelScanningPass) walk(ast.value);
-        return [ v ];
+analyser.walkers.match_variable = (ast, settings) => {
+    if(settings.usedVars.has(ast.name.value)) {
+        addSemanticToken(ast.name);
     }
-
-    walk(ast.value);
+    else {
+        settings.usedVars.add(ast.name.value);
+        decVariable(ast, ast.name, false, settings.scope, settings.value);
+    }
 }
 
-analyser.walkers.array_destructure = (ast, settings) => {
+analyser.walkers.match_array = (ast, settings) => {
+    if(ast.collectiveTail) {
+        [ ...ast.head, ast.collectiveTail ].forEach(x => walk(x, settings));
+    }
+    else {
+        [ ...ast.head, ...ast.tail ].forEach(x => walk(x, settings));
+    }
+}
+
+analyser.walkers.match_table = (ast, settings) => {
+    ast.elements.forEach(x => {
+        walk(x.key, settings);
+        walk(x.pattern, settings);
+    });
+};
+
+analyser.walkers.match_pattern = (ast, settings) => {
+    if(ast.metatable) walk(ast.metatable);
+    walk(ast.pattern, settings);
+}
+
+analyser.walkers.match = ast => {
+    walk(ast.expression);
+
+    ast.branches.forEach(x => { 
+        walk(x.pattern, {
+            scope: x,
+            value: x.value,
+            usedVars: new Set()
+        }); 
+        walk(x.value); 
+        x.conditions.forEach(walk);
+    });
+
+    walk(ast.else_value);
+}
+
+analyser.walkers.destruct_variable = (ast, settings) => 
+    [ decVariable(ast, ast.name, settings?.global, settings.scope, settings.value) ];
+
+analyser.walkers.destruct_array = (ast, settings) => {
+    if(ast.collectiveTail) {
+        return [ ...ast.head, ast.collectiveTail ].map(x => walk(x, settings)).flat();
+    }
+    else {
+        return [ ...ast.head, ...ast.tail ].map(x => walk(x, settings)).flat();
+    }
+}
+
+analyser.walkers.destruct_table = (ast, settings) => 
+    ast.elements.map(x => walk(x.pattern, settings)).flat();
+
+analyser.walkers.let_stmt = (ast, settings) => {
     
-    if(!settings?.topLevelScanningPass) {
+    if(settings?.topLevelScanningPass == ast.isGlobal) {
+        walk(ast.pattern, {
+            ...settings,
+            global: ast.isGlobal,
+            value: ast.value
+        });
+    }
+    
+    if(ast.value && (!settings?.topLevelScanningPass || !ast.isGlobal))
         walk(ast.value);
-        // return;
-    }
-
-    if(settings?.topLevelScanningPass == settings?.global) {
-        const v = [ ];
-        for (const va of [ ...ast.head, ...ast.tail ]) {
-            v.push(decVariable(ast, va, settings?.global, null, null));
-        }
-
-        return v;
-    }
 }
 
-analyser.walkers.table_destructure = (ast, settings) => {
-
-    if(!settings?.topLevelScanningPass) {
-        walk(ast.value);
-        // return;
-    }
-
-    if(settings?.topLevelScanningPass == settings?.global) {
-        const v = [ ];
-        for (const va of ast.pairs) {
-            v.push(decVariable(ast, va.name, settings?.global, null, null));
-        }
-
-        return v;
-    }
-}
-
-analyser.walkers.let_in_expr = ast => {
-    const vars = walk(ast.definition);
+analyser.walkers.let_in_expr = (ast, settings) => {
+    const vars = walk(ast.declaration, {
+        ...settings,
+        scope: ast
+    }) || [];
 
     if(ast.hasInBranch) {
         for (const v of vars) {
             v.scope = ast;
         }
 
-        walk(ast.expression);
+        // if(settings?.topLevelScanningPass == settings?.global)
+            
     }
+
+    walk(ast.expression);
 }
 
 analyser.walkers.function = ast => {
     for (const p of ast.parameters) {
         if(p.defaultValue) walk(p.defaultValue);
         // console.log(p);
-        decVariable(ast, p.name, false, ast.result, null);
+        decVariable(ast, p.name, false, ast.result, p.defaultValue);
     }
 
     walk(ast.result);
@@ -368,12 +430,12 @@ const analyse = (filename, ast, updateFile, savedVariables) => {
                 if(!isFirst)
                     backgroundVariables.push(found);
             }
-            else
-                errors.push(generateError(e, "Attempt to export a non-existent variable '" + e.value + "'"));
+            // else
+            //     errors.push(generateError(e, "Attempt to export a non-existent variable '" + e.value + "'"));
         }
 
         for (const v of variables) {
-            if(v.filename == currentFile && !v.used && v.name != "main" && v.name != "_") {
+            if(v.filename == currentFile && !v.used && v.name != "main" && v.name != "_" && v.name != "self") {
                 warnings.push(generateError(v.range, "Unused variable '" + v.name + "'", true));
             }
         }

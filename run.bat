@@ -1,0 +1,1 @@
+cd "test2/out" & lua "a.lua"

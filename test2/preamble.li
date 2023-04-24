@@ -36,44 +36,50 @@
 -- let putln = \x -> do print x then pass
 -- let read = \x = "*line" -> boxed (io.read x)
 
-let export head = \a -> a #1 
-
+-- returns true if a predicate holds for every element 
+-- in an array
 let export all = \a, f -> cases
-    | len a == 0, true
-    | else, f a #1 & all (tail a) f
+    | len a == 0 -> true
+    | else -> f a #1 & all (tail a) f
 
+-- returns true if a predicate holds for any element
+-- in an array
 let export any = \a, f -> cases
-    | len a == 0, false
-    | else, f a #1 or any (tail a) f
+    | len a == 0 -> false
+    | else -> f a #1 or any (tail a) f
 
+-- applies a function to every element in an array
+-- and returns the result
 let export map = \a, f -> [ f x | x <- a ]
+
+-- returns an array containing only the elements
+-- that satisfy a predicate
 let export filter = \a, f -> [ x | x <- a, f x ]
 
+-- equivalent to map, but passes the index of each
+-- element to the function as well
 let export map_i = \a, f, i = 1 -> cases
-    | len a == 0, []
-    | else, [f (head a) i] ++ map_i (tail a) f (i + 1)
+    | len a == 0 -> []
+    | else -> [f (head a) i] ++ map_i (tail a) f (i + 1)
 
--- gets a copy of an array except for the first N elements
+-- copies a slice of an array starting from "first" to optionally "last"
 let export slice = \b, first, last = len b -> cases
-    | type b == "string", string.sub b first last
-    | else, cases
-        | first >= last, [ b #first ]
-        | else, [ b #first ] ++ slice b (first + 1) last
+    | type b == "string" -> string.sub b first last
+    | else -> cases
+        | first >= last -> [ b #first ]
+        | else -> [ b #first ] ++ slice b (first + 1) last
 
--- gets a copy of an array except for the first element
-let export tail = \a -> cases
-    | len a == 0, !
-    | else, slice a 2
-
+-- standard right fold
 let export foldr = \a, v, f, i = 1 -> 
     let n = len a in cases
-        | n == 0, v
-        | else, f (head a) (foldr (tail a) v f (i + 1)) i
+        | n == 0 -> v
+        | else -> f (head a) (foldr (tail a) v f (i + 1)) i
 
+-- standard left fold
 let export foldl = \a, v, f, i = 1 -> 
     let n = len a in cases
-        | n == 0, v
-        | else, foldl (tail a) (f v (head a) i) f (i + 1)
+        | n == 0 -> v
+        | else -> foldl (tail a) (f v (head a) i) f (i + 1)
 
 -- creates an array [ 1, 2 ... n ]
 -- has three overloads:
@@ -82,28 +88,31 @@ let export foldl = \a, v, f, i = 1 ->
 --  - range first last step
 let export range = \a, b, step = 1 -> 
     let [ first, last ] = cases
-        | b == !, [ 1, a ]
-        | else, [ a, b ]
+        | b == ! -> [ 1, a ]
+        | else -> [ a, b ]
     in cases
-        | first == last, [ first ]
-        | last < first, [ ]
-        | else, [ first ] ++ range (first + step) last step
-
-let export parts = \t -> [ head t, tail t ]
+        | first == last -> [ first ]
+        | last < first -> [ ]
+        | else -> [ first ] ++ range (first + step) last step
 
 let export pack = \x... -> x
 
 let export is_array = \t -> 
-    type t == "table" & all (pairs t) \kv -> 
+    type t == "table" & all (pairset t) \kv -> 
         let [ k, _ ] = kv in type k == "number"
 
 let export flatten = \a -> foldl a [] (\l, r -> cases
-    | is_array r, l ++ (flatten r)
-    | else, l ++ [r]) 
+    | is_array r -> l ++ (flatten r)
+    | else -> l ++ [r]) 
 
 let export shallow_flatten = \a -> foldl a [] (\l, r -> cases
-    | is_array r, l ++ r
-    | else, l ++ [r]) 
+    | is_array r -> l ++ r
+    | else -> l ++ [r]) 
 
 let export sole = \a -> a # (len a)
     
+let export member = \a, x -> any a (\y -> y == x)
+
+set string.join = \a, sep = "" -> 
+    let [ h ::: t ] = a in 
+    foldl t h (\l, r -> l .. sep .. r)

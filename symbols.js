@@ -1,4 +1,5 @@
 const SYMBOLS = {
+    ":::": "triple_colon",
     "...": "ellipses",
     "::": "square",
     "?.": "nullco",
@@ -57,7 +58,8 @@ const KEYWORDS = [
     "true",
     "false",
     "nil",
-    "foreign",
+    "match",
+    "vmatch",
     "if",
     "end",
     "set"

@@ -59,6 +59,7 @@ class Parser {
     offset = 0;
     filename;
     exports = [ ];
+    errors = [ ];
 
     constructor(filename, tokens) {
         this.tokens = tokens;
@@ -149,6 +150,11 @@ class Parser {
         return t;
     }
 
+    isOneOf(...types) {
+        const t = this.peek();
+        return types.includes(t.type);
+    }
+
     eatAnyKeyword(...values) {
         const t = this.peek();
         if(t.type != "keyword" || !values.includes(t.value)) {
@@ -205,6 +211,194 @@ class Parser {
         }
     }
 
+    match() {
+        const begin = this.keyword("match");
+        const expr = this.expression();
+
+        const branches = [ ];
+        while(this.peek().type == "union" && this.peek(1).type != "keyword" && this.peek(1).value != "else") {
+            const patterns = [ ];
+            while(this.peek().type == "union" && this.peek(1).type != "keyword" && this.peek(1).value != "else") {
+                this.eat();
+                const allVariables = new Set();
+                const pattern = this.matchPattern(allVariables);
+
+                const conditions = [ ];
+                while(this.isOneOf("comma", "semicolon")) {
+                    this.eat();
+                    conditions.push(this.expression());
+                }
+
+                patterns.push({
+                    pattern: pattern,
+                    allVariables: Array.from(allVariables),
+                    conditions: conditions
+                });
+            }
+            
+            // this.separator();
+            this.eat("thin_arrow");
+            const result = this.expression();
+
+            for (const pattern of patterns) {
+                branches.push(ast("match_branch", begin, result.lastToken, {
+                    value: result,
+                    ...pattern,
+                }));
+            }
+        }
+
+        this.eat("union");
+        this.keyword("else");
+        // this.separator();
+        this.eat("thin_arrow");
+
+        const elseValue = this.expression();
+
+        return ast("match", begin, elseValue.lastToken, {
+            expression: expr,
+            branches: branches,
+            else_value: elseValue
+        });
+    }
+
+    matchTable(allVariables) {
+        const begin = this.eat("open_curly");
+        const elements = this.listOf(this.matchTableElement.bind(this, allVariables), "close_curly");
+        return ast("match_table", begin, elements.end, {
+            elements: elements.elements
+        });
+    }
+
+    matchTableElement(allVariables) {
+
+        const t = this.peek();
+        let keyAST;
+        let patternAST;
+
+        if(t.type == "dollar") {
+            this.eat();
+            const key = this.identifier();
+            
+            const optional = this.peek().type == "question_mark";
+            if(optional) this.eat();
+
+            keyAST = ast("string", key, key, {
+                value: key.value
+            });
+            patternAST = ast("match_variable", key, key, {
+                name: key,
+                optional: optional
+            });
+        }
+        else if(t.type == "dot") {
+            this.eat();
+            const key = this.identifier();
+            keyAST = ast("string", key, key, {
+                value: key.value
+            });
+
+            if(this.peek().type == "equals") {
+                this.eat();
+                patternAST = this.matchPattern(allVariables);
+            }
+            else {
+                patternAST = ast("match_expression", key, key, {
+                    expression: ast("variable", key, key, {
+                        name: key.value
+                    })
+                });
+            }
+        }
+        else if(t.type == "pound") {
+            this.eat();
+            keyAST = this.expression();
+            this.eat("equals");
+            patternAST = this.matchPattern(allVariables);
+        }
+        else this.eatAny("dollar", "dot", "pound");
+        
+        return ast("match_table_element", t, patternAST.lastToken, {
+            key: keyAST,
+            pattern: patternAST
+        });
+    }
+
+    matchPattern(allVariables) {
+
+        // let mt;
+        // if(this.peek().type == "lt") {
+        //     this.eat();
+        //     mt = this.expression();
+        //     this.eat("gt");
+        // }
+
+        let mt;
+        const o = this.offset;
+        try {
+            const _mt = this.expression();
+            this.eat("square");
+            mt = _mt;
+        }
+        catch (e) {
+            this.offset = o;
+        }
+
+        const c = this.peek();
+        const m = (() => { switch(c.type) {
+            case "open_curly": return this.matchTable(allVariables);
+            case "open_square": return this.matchArray(allVariables);
+            case "dollar": return this.matchVariable(allVariables);
+            default: return this.matchExpression();
+        }})();
+
+        return ast("match_pattern", c, m.lastToken, {
+            metatable: mt,
+            pattern: m
+        });
+    }
+
+    matchArray(allVariables) {
+        const begin = this.eat("open_square");
+        const head = this.listOf(this.matchPattern.bind(this, allVariables), "ellipses", "triple_colon", "close_square");
+        
+        let tail;
+        let collectiveTail;
+
+        if(head.end.type == "ellipses") {
+            tail = this.listOf(this.matchPattern.bind(this, allVariables), "close_square");
+        } else if(head.end.type == "triple_colon") {
+            collectiveTail = this.matchVariable(allVariables);
+            this.eat("close_square");
+        }
+
+        const tailElements = tail? tail.elements : [ ];
+        return ast("match_array", begin, tail? tail.end : head.end, {
+            head: head.elements,
+            tail: tailElements,
+            collectiveTail: collectiveTail
+        });
+    }
+
+    matchVariable(allVariables) {
+        const begin = this.eat("dollar");
+        const name = this.eat("identifier");
+        const optional = this.peek().type == "question_mark";
+        if(optional) this.eat();
+        allVariables.add(name.value);
+        return ast("match_variable", begin, name, {
+            name: name,
+            optional: optional
+        });
+    }
+
+    matchExpression() {
+        const expr = this.expression();
+        return ast("match_expression", expr.firstToken, expr.lastToken, {
+            expression: expr
+        });
+    }
+
     destructPattern(exportsAllowed) {
         const c = this.peek();
         switch(c.type) {
@@ -216,83 +410,155 @@ class Parser {
 
     destructVariable(exportsAllowed) {
         const isExport = this.isKeyword("export");
+        let exportToken;
         if(isExport) {
-            this.keyword("export");
+            exportToken = this.keyword("export");
         }
         const name = this.eat("identifier");
         if(isExport) {
             this.exports.push(name);
             if(!exportsAllowed) 
-                throw this.generateError("Cannot export local variables", name);
+                throw this.generateError("Cannot export local variable '" + name.value + "'", exportToken);
         }
         return ast("destruct_variable", name, name, {
-            name: name.value,
+            name: name,
             isExport: isExport
         });
     }
 
     destructArray(exportsAllowed) {
         const begin = this.eat();
-        const head = this.listOf(this.destructPattern.bind(this, exportsAllowed), "ellipses", "close_square");
+        const head = this.listOf(this.destructPattern.bind(this, exportsAllowed), "ellipses", "triple_colon", "close_square");
+        
         let tail;
+        let collectiveTail;
+
         if(head.end.type == "ellipses") {
             tail = this.listOf(this.destructPattern.bind(this, exportsAllowed), "close_square");
+        } else if(head.end.type == "triple_colon") {
+            collectiveTail = this.destructVariable(exportsAllowed);
+            this.eat("close_square");
         }
+
         const tailElements = tail? tail.elements : [ ];
         return ast("destruct_array", begin, tail? tail.end : head.end, {
             head: head.elements,
-            tail: tailElements
+            tail: tailElements,
+            collectiveTail: collectiveTail
         });
     }
 
     destructTableElement(exportsAllowed) {
         const begin = this.peek();
 
-        // [export] .foo
-        if(this.isKeyword("export") || begin.type == "dot") {
-            const isExport = this.isKeyword("export");
-            if(isExport) {
-                this.keyword("export");
-            }
+        if(this.isKeyword("export")) {
+            this.eat();
             this.eat("dot");
             const name = this.eat("identifier");
-            if(isExport) {
-                this.exports.push(name);
-            }
+            this.exports.push(name);
+
+            if(!exportsAllowed)
+                throw this.generateError("Cannot export local variable '" + name.value + "'", begin);
+
             return ast("destruct_table_element", begin, name, {
-                name: name.value,
-                index: ast("string", name, name, {
-                    value: name.value
+                pattern: ast("destruct_variable", name, name, {
+                    name: name,
+                    isExport: true
                 }),
-                isExport: isExport
+                key: ast("string", name, name, {
+                    value: name.value
+                })
             });
         }
-        // [export] foo <- .field
-        // [export] foo <- "expression"
+        
+        let index;
+        let isDotIndex;
+        let dotField;
+        if(begin.type == "dot") {
+            this.eat();
+            dotField = this.eat("identifier");
+            index = ast("string", dotField, dotField, {
+                value: dotField.value
+            });
+            isDotIndex = true;
+        }
+        else if(begin.type == "pound") {
+            this.eat();
+            index = this.expression();
+        }
         else {
-            const pattern = this.destructPattern(exportsAllowed);
-            this.eat("left_thin_arrow");
-            let index;
-            if(this.peek().type == "dot") {
-                this.eat("dot");
-                const field = this.eat("identifier");
-                index = ast("string", field, field, {
-                    value: field.value
-                });
-            }
-            else {
-                index = this.expression();
-            }
-            return ast("destruct_table_element", begin, index.lastToken, {
-                name: pattern.name,
-                index: index,
+            throw this.generateError("Expected '#' or '.' to index table", begin);
+        }
+
+        let pattern;
+        if(this.peek().type == "equals") {
+            this.eat();
+            pattern = this.destructPattern(exportsAllowed);
+        }
+        else if(isDotIndex) {
+            pattern = ast("destruct_variable", dotField, dotField, {
+                name: dotField,
+                isExport: false
             });
         }
+        else this.eat("equals");
+
+        return ast("destruct_table_element", begin, pattern.lastToken, {
+            pattern: pattern,
+            index: index
+        });
+
+        // [export] .foo
+        // if(begin.type == "dot" || (begin.value == "export" && this.peek(1).type == "dot")) {
+        //     const isExport = this.isKeyword("export");
+        //     let exportToken;
+        //     if(isExport) {
+        //         exportToken = this.keyword("export");
+        //     }
+        //     this.eat("dot");
+        //     const name = this.eat("identifier");
+        //     if(isExport) {
+        //         this.exports.push(name);
+        //         if(!exportsAllowed) 
+        //             throw this.generateError("Cannot export local variable '" + name.value + "'", exportToken);
+        //     }
+        //     return ast("destruct_table_element", begin, name, {
+        //         pattern: ast("destruct_variable", name, name, {
+        //             name: name,
+        //             isExport: isExport
+        //         }),
+        //         index: ast("string", name, name, {
+        //             value: name.value
+        //         }),
+        //         isExport: isExport
+        //     });
+        // }
+        // // [export] foo <- .field
+        // // [export] foo <- "expression"
+        // else {
+        //     const pattern = this.destructPattern(exportsAllowed);
+        //     this.eat("left_thin_arrow");
+        //     let index;
+        //     if(this.peek().type == "dot") {
+        //         this.eat("dot");
+        //         const field = this.eat("identifier");
+        //         index = ast("string", field, field, {
+        //             value: field.value
+        //         });
+        //     }
+        //     else {
+        //         index = this.expression();
+        //     }
+        //     return ast("destruct_table_element", begin, index.lastToken, {
+        //         pattern: pattern,
+        //         index: index,
+        //     });
+        // }
     }
 
-    destructTable() {
+    destructTable(exportsAllowed) {
         const begin = this.eat();
-        const elements = this.listOf(this.destructTableElement.bind(this), "close_curly");
+        const elements = this.listOf(this.destructTableElement.bind(this, exportsAllowed), "close_curly");
         return ast("destruct_table", begin, elements.end, {
             elements: elements.elements
         });
@@ -301,7 +567,8 @@ class Parser {
     program() {
 
         const imports = [ ];
-        const errors = [ ];
+        this.errors = [ ];
+        const errors = this.errors;
         this.exports = [ ];
 
         while(this.isKeyword("import")) {
@@ -313,7 +580,12 @@ class Parser {
 
         while(true) {
             while(this.isKeyword("let") || this.isKeyword("set")) {
-                this.tryDo(errors, () => decs.push(this.declaration(true)));
+                this.tryDo(errors, () => {
+                    const dec = this.declaration(true);
+                    dec.isGlobal = true;
+                    decs.push(dec);
+                    // console.log("got here!!!!");
+                });
             }
 
             if(/* !this.isKeyword("export") && */this.peek().type != "EOF") {
@@ -384,92 +656,6 @@ class Parser {
         });
     }
 
-    simpleDefinition(begin, isExport) {
-        const name = this.identifier();
-        if(isExport && name.value != "_") {
-            this.exports.push(name);
-        }
-        this.eat("equals");
-        const value = this.expression();
-        // console.log(this.peek());
-        return ast("simple_def", begin, value.lastToken, {
-            name: name,
-            value: value
-        });
-    }
-
-    arrayDestructure(begin, isExport) {
-        this.eat("open_square");
-        const head = this.listOf(this.identifier.bind(this), "ellipses", "close_square");
-        let tail;
-        if(head.end.type == "ellipses") {
-            tail = this.listOf(this.identifier.bind(this), "close_square");
-        }
-        this.eat("equals");
-        const value = this.expression();
-        const tailElements = tail? tail.elements : [ ];
-
-        if(isExport) {
-            this.exports.push(
-                ...head.elements.map(e => e.value).filter(x => x != "_"), 
-                ...tailElements.map(e => e.value).filter(x => x != "_")
-            );
-        }
-
-        return ast("array_destructure", begin, tail? tail.end : head.end, {
-            head: head.elements,
-            tail: tailElements,
-            value: value
-        });
-    }
-
-    tableDestructureElement(isExport) {
-        const t = this.peek();
-        if(t.type == "dot") {
-            this.eat();
-            const name = this.identifier();
-            if(isExport && name.value != "_") {
-                this.exports.push(name.value);
-            }
-            return {
-                name: name,
-                index: ast("string", t, name, { value: name.value })
-            }
-        }
-        else {
-            const name = this.identifier();
-            if(isExport && name.value != "_") {
-                this.exports.push(name.value);
-            }
-            this.eat("equals");
-            const t = this.peek();
-            if(t.type == "dot") {
-                this.eat();
-                const index = this.eat("identifier");
-                return {
-                    name: name,
-                    index: ast("string", t, index, { value: index.value })
-                }
-            }
-            else return {
-                name: name,
-                index: this.expression()
-            }
-        }
-    }
-
-    tableDestructure(begin, isExport) {
-        this.eat("open_curly");
-        const items = this.listOf(this.tableDestructureElement.bind(this, isExport), "close_curly");
-        this.eat("equals");
-        const value = this.expression();
-
-        return ast("table_destructure", begin, value.lastToken, {
-            pairs: items.elements,
-            value: value
-        });
-    }
-
     expression() {
         if(this.isKeyword("let")) {
             return this.letIn();
@@ -482,6 +668,9 @@ class Parser {
         }
         else if(this.isKeyword("cases")) {
             return this.cases();
+        }
+        else if(this.isKeyword("match")) {
+            return this.match();
         }
         else if(this.isKeyword("if")) {
             return this.ifExpr();
@@ -502,7 +691,7 @@ class Parser {
                     this.eat();
                     const body = this.expression();
                     return ast("function", t, body.lastToken, {
-                        parameters: [ { name: "self", token: t, variadic: false } ],
+                        parameters: [ { name: ast("identifier", t, t, { value: "self" }), token: t, variadic: false } ],
                         result: body
                     });
                 }
@@ -542,7 +731,8 @@ class Parser {
         while(this.peek().type == "union" && this.peek(1).type != "keyword" && this.peek(1).value != "else") {
             this.eat();
             const condition = this.expression();
-            this.separator();
+            // this.separator();
+            this.eat("thin_arrow");
             const result = this.expression();
             branches.push({
                 condition: condition,
@@ -552,7 +742,8 @@ class Parser {
 
         this.eat("union");
         this.keyword("else");
-        this.separator();
+        // this.separator();
+        this.eat("thin_arrow");
 
         const elseValue = this.expression();
 
@@ -592,13 +783,19 @@ class Parser {
             // this.eat();
             this.keyword("in");
             // console.log(this.peek());
-            expr = this.expression();
+            expr = this.tryDo(this.errors, this.expression.bind(this));
             // hasInBranch = true;
         }
-        else expr = ast("nil", dec.firstToken, dec.lastToken);
+        
+        if(!expr || !hasInBranch) {
+            expr = ast("nil", dec.firstToken, dec.lastToken, {
+                fake: true
+            });
+            hasInBranch = false;
+        }
 
         return ast("let_in_expr", dec.firstToken, expr.lastToken, {
-            definition: dec,
+            declaration: dec,
             expression: expr,
             hasInBranch: hasInBranch
         });
@@ -617,36 +814,14 @@ class Parser {
 
     declaration(isTopLevel = false) {
         if(this.isKeyword("let")) {
-            // const o = this.offset;
             const begin = this.keyword("let");
-
-            let isExport = false;
-            if(isTopLevel && this.isKeyword("export")) {
-                this.keyword("export");
-                isExport = true;
-            }
-
-            let result;
-            switch(this.peek().type) {
-                case "open_square": {
-                    // this.offset = o;
-                    result = this.arrayDestructure(begin, isExport);
-                    break;
-                }
-                case "open_curly": {
-                    // this.offset = o;
-                    result = this.tableDestructure(begin, isExport);
-                    break;
-                }
-                default: {
-                    // this.offset = o;
-                    result = this.simpleDefinition(begin, isExport);
-                    break;
-                }
-            }
-            
-            result.isExport = isExport;
-            return result;
+            const pattern = this.destructPattern(isTopLevel);
+            this.eat("equals");
+            const value = this.tryDo(this.errors, this.expression.bind(this));
+            return ast("let_stmt", begin, value? (value.lastToken || pattern.lastToken) : pattern.lastToken, {
+                pattern: pattern,
+                value: value
+            });
         }
         else if(this.isKeyword("set")) {
             return this.assignment();
@@ -984,7 +1159,7 @@ class Parser {
                 this.eat();
                 return ast("property", t, t, { 
                     table: ast("variable", t, t, { name: "self" }),
-                    name: t.value
+                    name: t
                 });
             }
 
@@ -1106,7 +1281,15 @@ class Parser {
             if(t == "dot") {
                 this.eat();
                 const eaten = this.eatAny("arrow", "thin_arrow");
-                return [ { name: eaten.type == "thin_arrow"? "_" : "self", token: t_tok, variadic: false } ];
+                return [ 
+                    { 
+                        name: ast("identifier", t_tok, t_tok, { 
+                            value: eaten.type == "thin_arrow"? "_" : "self" 
+                        }), 
+                        token: t_tok, 
+                        variadic: false 
+                    } 
+                ];
             }
             else {
                 while(t != "arrow" && t != "thin_arrow") {
@@ -1121,15 +1304,24 @@ class Parser {
                     }
                     else {
                         if(t == "arrow")
-                            a.unshift({ name: "self" });
+                            a.unshift({ 
+                                name: ast("identifier", tok, tok, { value: "self" }),
+                                token: tok,
+                                variadic: false 
+                            });
                         
                         this.eatAny("arrow", "thin_arrow");
                         return a;
                     }
                 }
 
-                if(this.peek().type == "arrow")
-                    a.unshift({ name: "self" });
+                const tok = this.peek();
+                if(tok.type == "arrow")
+                    a.unshift({ 
+                        name: ast("identifier", tok, tok, { value: "self" }),
+                        token: tok,
+                        variadic: false 
+                    });
                 
                 this.eatAny("arrow", "thin_arrow");
                 return a;
@@ -1151,7 +1343,8 @@ class Parser {
     }
 
     tableElement() {
-        if(this.peek().type == "dot") {
+        const c = this.peek().type;
+        if(c == "dot") {
             this.eat();
             const name = this.eat("identifier");
             const key = ast("string", name, name, { value: name.value });
@@ -1168,7 +1361,8 @@ class Parser {
                 value: value
             }
         }
-        else {
+        else if(c == "pound") {
+            this.eat();
             const key = this.expression();
             this.eat("equals");
             const val = this.expression();
@@ -1176,6 +1370,9 @@ class Parser {
                 index: key,
                 value: val
             }
+        }
+        else {
+            throw this.generateError("Expected \"#\" or \".\" to begin a table key, but got " + this.peek().friendlyName, this.peek());
         }
     }
 
@@ -1237,26 +1434,6 @@ class Parser {
         return ast("table", begin, items.end, {
             elements: items.elements
         });
-
-        // const elements = [ ];
-        // while(this.peek().type != "close_curly") {
-        //     elements.push(this.tableElement());
-        //     const t = this.peek().type;
-        //     if(t == "comma" || t == "semicolon") {
-        //         this.eat();
-        //     }
-        //     else {
-        //         const end = this.eat("close_curly");
-        //         return ast("table", begin, end, {
-        //             elements: elements
-        //         });
-        //     }
-        // }
-
-        // const end = this.eat("close_curly");
-        // return ast("table", begin, end, {
-        //     elements: elements
-        // });
     }
 
     arrayComprehension() {
@@ -1313,3 +1490,4 @@ class Parser {
 }
 
 exports.Parser = Parser;
+exports.ast = ast;

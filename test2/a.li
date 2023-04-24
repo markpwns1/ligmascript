@@ -1,4 +1,47 @@
 
-import "preamble.li"
+--[
+import "serialise.li"
+
+let vec2 = proto {
+    .constructor = \x, y -> { .x, .y },
+    .__tostring = => "(${@x}, ${@y})"
+}
+
+let vec3 = proto {
+    .constructor = \x, y, z -> { .x, .y, .z },
+    .__tostring = => "(${@x}, ${@y}, ${@z})"
+}
+
+let f = \t, accept_hi = false -> match t
+    | "hello" 
+    | "hi", accept_hi == true 
+        -> print "hello!!!"
+    | { $x, $y, $z? }, y == 1 + 2 
+        -> print $ x + y + (z or 0)
+    | vec2 :: $x 
+        -> print x
+    | else 
+        -> print "no match!"
+
+-- prints (6, 7) then 9 then "no match!" then "hello!!!"
+let main = -> 
+    let [a, b] = [vec2 6 7, vec3 2 3 4] in do 
+        f a ;
+        f b ;
+        f "hi" ;
+        f "hi" true
+    end
+    
+]
 
 
+let any = \a, f -> match a 
+    | [] -> false
+    | [ $x ::: $xs ] -> f x or any xs f
+    | else -> panic!
+
+let main = -> 
+    let a = [1, 2, 3, 4, 5] in do 
+        print $ any a (=> @ > 3) ;
+        print $ any a (=> @ > 5)
+    end

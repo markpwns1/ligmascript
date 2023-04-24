@@ -2,11 +2,8 @@
 const fs = require("fs");
 const path = require("path");
 const { Scanner } = require("./scanner");
-const { Parser } = require("./parser-new");
+const { ast } = require("./parser-new");
 // const types = require("./new_type");
-
-const INPUT_FILE = process.argv[2];
-const OUTPUT_FILE = process.argv[3] || (INPUT_FILE.substring(0, INPUT_FILE.lastIndexOf(".")) + ".lua");
 
 // let preprocess = (original_src) => {
 //     let src = "";
@@ -63,66 +60,258 @@ const addDefinition = (ast, name) => {
     definitions.push(name);
 }
 
+let tempVarIndex = 0;
+const tempVarName = () => "__temp" + (tempVarIndex++);
+const raw = txt => ast("raw", null, null, { value: txt });
+
 const evaluators = { };
 
-evaluators.simple_def = ast => {
-    let prefix = "local " + emitIdentifier(ast.name.value) + ";";
+evaluators.raw = ast => ast.value;
+
+const mtCheck = (mt, rhand) => {
+    if(mt) {
+        return "if getmetatable(" + evaluate(rhand) + ") ~= " + evaluate(mt) + " then break end ";
+    }
+    else return ""
+}
+
+const mtCheckBreakConditions = (mt, rhand) => {
+    if(mt) return [ "getmetatable(" + evaluate(rhand) + ") ~= " + evaluate(mt) ];
+    else return [ ];
+}
+
+evaluators.match_expression = (ast, rhand, usedVars, mt) => {
+    if(mt) {
+        // const varName = tempVarName();
+        // let toEmit = evalBody(rhand, true, setVarReturn(varName)) + " ";
+        let [varName, toEmit] = saveVar(rhand);
+        toEmit += mtCheck(mt, raw(varName));
+        toEmit += "if " + evaluate(ast.expression) + " ~= " + varName + " then break end ";
+        return toEmit;
+    }
+    else {
+        return "if " + evaluate(ast.expression) + " ~= " + evaluate(rhand) + " then break end ";
+    }
+}
+
+evaluators.match_variable = (ast, rhand, usedVars, mt) => {
+    // const varName = tempVarName();
+    // let toEmit = evalBody(rhand, true, setVarReturn(varName)) + " ";
+    // if(ast.optional && !mt && !usedVars.has(ast.name.value)) {
+    //     const toEmit = "local " + ast.name.value + " = " + evaluate(rhand) + " ";
+    //     usedVars.add(ast.name.value);
+    //     return toEmit;
+    // }
+    // else {
+    //     let [varName, toEmit] = saveVar(rhand);
+    //     toEmit += mtCheck(mt, raw(varName));
+    //     toEmit += "if " + varName + " == nil";
+    //     if(usedVars.has(ast.name.value)) {
+    //         toEmit += " or " + varName + " ~= " + ast.name.value;
+    //     }
+    //     toEmit += " then break end ";
+    //     toEmit += "local " + ast.name.value + " = " + varName + " ";
+    //     usedVars.add(ast.name.value);
+    //     return toEmit;
+    // }
+
+    let toEmit = "";
+    const varName = ast.name.value;
+    const userVarsHas = usedVars.has(varName);
+    const breakConditions = [ ];
+
+    if(userVarsHas) {
+        breakConditions.push(varName + " ~= " + evaluate(rhand));
+    }
+    else {
+        toEmit += "local " + varName + " = " + evaluate(rhand) + " ";
+        usedVars.add(varName);
+    }
+
+    if(ast.optional) {
+        return toEmit;
+    }
+    else {
+        breakConditions.push(varName + " == nil");
+    }
+
+    breakConditions.push(...mtCheckBreakConditions(mt, raw(varName)));
+
+    if(breakConditions.length > 0) {
+        toEmit += "if " + breakConditions.map(x => "(" + x + ")").join(" or ") + " then break end ";
+    }
+
+    return toEmit;
+}
+
+evaluators.match_array = (ast, rhand, usedVars, mt) => {
+    // const arrayVar = tempVarName();
+    // let toEmit = evalBody(rhand, true, setVarReturn(arrayVar)) + " ";
+    let [arrayVar, toEmit] = saveVar(rhand);
+
+    toEmit += mtCheck(mt, raw(arrayVar));
+
+    if(ast.tail && ast.tail.length > 0) {
+        toEmit += "if type(" + arrayVar + ") ~= \"table\" or #" + arrayVar + " < " + (ast.head.length + ast.tail.length) + " then break end ";
+    }
+    else if(!ast.collectiveTail) {
+        toEmit += "if type(" + arrayVar + ") ~= \"table\" or #" + arrayVar + " ~= " + ast.head.length + " then break end ";
+    }
+
+    for (let i = 0; i < ast.head.length; i++) {
+        toEmit += evaluate(ast.head[i], raw(arrayVar + "[" + (i + 1) + "]"), usedVars) + " ";
+    }
+    for(let i = 0; i < ast.tail.length; i++) {
+        toEmit += evaluate(ast.tail[i], raw(arrayVar + "[#" + arrayVar + " - " + (ast.tail.length - i - 1) + "]"), usedVars) + " ";
+    }
+    if(ast.collectiveTail) {
+        toEmit += "local " + ast.collectiveTail.name.value + " = slice(" + arrayVar + ", " + (ast.head.length + 1) + ", #" + arrayVar + ", 1) ";
+    }
+    return toEmit;
+}
+
+const saveVar = rhand => {
+    if(rhand.type == "variable") {
+        return [rhand.name, ""];
+    }
+    else {
+        const varName = tempVarName();
+        const toEmit = "local " + evalBody(rhand, true, setVarReturn(varName)) + " ";
+        return [varName, toEmit];
+    }
+}
+
+evaluators.match_table = (ast, rhand, usedVars, mt) => {
+    let [tableVar, toEmit] = saveVar(rhand);
+    toEmit += mtCheck(mt, raw(tableVar));
+    toEmit += "if type(" + tableVar + ") ~= \"table\" then break end ";
+
+    for(let i = 0; i < ast.elements.length; i++) {
+        const key = evaluate(ast.elements[i].key);
+        toEmit += evaluate(ast.elements[i].pattern, raw(tableVar + "[" + key + "]"), usedVars) + " ";
+    }
+
+    return toEmit;
+}
+
+evaluators.match_pattern = (ast, rhand, usedVars) =>
+    evaluate(ast.pattern, rhand, usedVars, ast.metatable);
+
+evaluators.match = (ast, simplify, returnPrefix) => {
+    let toEmit = "";
+    let rhand;
+    if(ast.expression.type == "variable") {
+        rhand = ast.expression;
+    }
+    else {
+        const varName = tempVarName();
+        toEmit += "local " + varName + " = " + evaluate(ast.expression) + " ";
+        rhand = raw(varName);
+    }
+
+    if(ast.branches.every(x => x.pattern.type == "match_expression")) {
+        for(let i = 0; i < ast.branches.length; i++) {
+            const branch = ast.branches[i];
+            toEmit += (i > 0? "else" : "") + 
+                "if " + evaluate(rhand) + " == " + evaluate(branch.pattern.expression) + 
+                (branch.conditions.map(x => " and " + evaluate(x))) + " then ";
+            toEmit += evalBody(branch.value, simplify, returnPrefix) + " ";
+        }
+        toEmit += "else " + evalBody(ast.else_value, simplify, returnPrefix) + " end";
+    }
+    else {
+        let unmatched;
+        const customReturnPrefix = returnPrefix != defaultReturn;
+        if(customReturnPrefix) {
+            unmatched = tempVarName();
+            toEmit += "local " + unmatched + " = true ";
+        }
+        for(let i = 0; i < ast.branches.length; i++) {
+            toEmit += "while " + (customReturnPrefix? unmatched : "true") + " do "
+            const branch = ast.branches[i];
+            toEmit += evaluate(branch.pattern, rhand, new Set());
+            if(branch.conditions.length > 0) {
+                toEmit += " if not (" + branch.conditions.map(evaluate).join(" and ") + ") then break end ";
+            }
+            if(customReturnPrefix) {
+                toEmit += " do " + evalBody(branch.value, simplify, returnPrefix) + " end " 
+                toEmit += unmatched + " = false "
+                toEmit += "break end ";
+            }
+            else {
+                toEmit += evalBody(branch.value, simplify, returnPrefix) + " end "
+            }
+            
+        }
+        if(customReturnPrefix) toEmit += "if " + unmatched + " then "
+        toEmit += evalBody(ast.else_value, simplify, returnPrefix) + (customReturnPrefix? " end " : " ");
+    }
+
+    return body(simplify, toEmit);
+}
+
+evaluators.destruct_table = (ast, rhand) => {
+    // const tableVar = tempVarName();
+    // let toEmit = evalBody(rhand, true, setVarReturn(tableVar)) + " ";
+    let [tableVar, toEmit] = saveVar(rhand);
+    for (let i = 0; i < ast.elements.length; i++) {
+        toEmit += evaluate(ast.elements[i].pattern, raw(tableVar + "[" + evaluate(ast.elements[i].index) + "]")) + " ";
+    }
+    return toEmit;
+}
+
+evaluators.destruct_array = (ast, rhand) => {
+    if(rhand.type == "array" && !ast.collectiveTail) {
+        let toEmit = "";
+        for (let i = 0; i < ast.head.length; i++) {
+            toEmit += evaluate(ast.head[i], rhand.elements[i]) + " ";
+        }
+        for(let i = 0; i < ast.tail.length; i++) {
+            toEmit += evaluate(ast.tail[i], rhand.elements[rhand.elements.length - ast.tail.length + i]) + " ";
+        }
+        return toEmit;
+    }
+    else {
+        // const arrayVar = tempVarName();
+        let [ arrayVar, toEmit ] = saveVar(rhand);
+        // let toEmit = evalBody(rhand, true, setVarReturn(arrayVar)) + " ";
+        for (let i = 0; i < ast.head.length; i++) {
+            toEmit += evaluate(ast.head[i], raw(arrayVar + "[" + (i + 1) + "]")) + " ";
+        }
+        for(let i = 0; i < ast.tail.length; i++) {
+            toEmit += evaluate(ast.tail[i], raw(arrayVar + "[#" + arrayVar + " - " + (ast.tail.length - i - 1) + "]")) + " ";
+        }
+        if(ast.collectiveTail) {
+            toEmit += evaluate(ast.collectiveTail, raw("slice(" + arrayVar + ", " + (ast.head.length + 1) + ", #" + arrayVar + ", 1)")) + " ";
+        }
+        return toEmit;
+    }
+    
+}
+
+evaluators.destruct_variable = (ast, rhand) => {
+    if(!ast.isExport && !rhand) return;
 
     if(depth == 0) {
         addDefinition(ast, ast.name.value);
-        prefix = "";
+    }
+
+    if(rhand.type == "function") {
+        return (ast.isExport? "" : "local ") + evaluate(rhand, ast.name.value);
+    }
+    else {
+        let prefix = ast.isExport? "" : ("local " + emitIdentifier(ast.name.value) + ";");
+
+        return prefix + evalBody(rhand, true, setVarReturn(ast.name.value));
     }
     
-    return prefix + evalBody(ast.value, true, setVarReturn(ast.name.value));
-}
+};
 
-evaluators.array_destructure = ast => {
-    // let prefix = "local " + ast.names.join(",") + ";";
+evaluators.let_stmt = ast => {
+    return evaluate(ast.pattern, ast.value);
+};
 
-    // if(depth == 0) {
-    //     ast.names.forEach(addDefinition);
-    //     prefix = "";
-    // }
-
-    // return prefix + evalBody(ast.value, true, setVarsReturn(ast.names));
-
-    const allNames = ast.head.map(getValue).concat(ast.tail.map(getValue)).concat(["__a"]).filter(x => x != "_");
-    let prefix = "local " + allNames.join(",") + ";";
-
-    if(depth == 0) {
-        allNames.forEach(x => addDefinition(ast, x));
-        prefix = "";
-    }
-
-    let txt = prefix + evalBody(ast.value, true, setVarReturn("__a")) + ";";
-    for (let i = 0; i < ast.head.length; i++) {
-        const name = ast.head[i].value;
-        if(name != "_")
-            txt += name + " = __a[" + (i + 1) + "] "
-    }
-
-    for (let i = 0; i < ast.tail.length; i++) {
-        const name = ast.tail[i].value;
-        if(name != "_")
-            txt += name + " = __a[#__a - " + (ast.tail.length - i - 1) + "] "
-    }
-
-    return txt;
-    // return prefix + ast.names.join(",") + " = unpack(" + evaluate(ast.value) + ")";
-}
-
-evaluators.table_destructure = ast => {
-    let prefix = "local " + ast.pairs.map(x => x.name.value).filter(x => x != "_").join(",") + ";";
-
-    if(depth == 0) {
-        ast.pairs.map(x => x.name.value).filter(x => x != "_").forEach(x => addDefinition(ast, x));
-        prefix = "";
-    }
-
-    return "local __t = " + evaluate(ast.value) + ";" + prefix + ast.pairs.filter(x => x.name.value != "_").map(x => x.name.value + " = __t[" + evaluate(x.index) + "]").join(";");
-}
-
-const SPECIALS = [ "when_expr", "do_expr", "let_in_expr", "assignment", "try_expr", "array_comprehension" ]
+const SPECIALS = [ "when_expr", "do_expr", "let_in_expr", "assignment", "try_expr", "array_comprehension", "match" ]
 
 const defaultReturn = content => "return " + content;
 const noReturn = content => "nop(" + content + ")";
@@ -176,7 +365,7 @@ evaluators.try_expr = (ast, simplify, returnPrefix) => {
 }
 
 evaluators.let_in_expr = (ast, simplify, returnPrefix) => {
-    const inner = evaluate(ast.definition) + (ast.hasInBranch? (";" + evalBody(ast.expression, simplify, returnPrefix)) : "--[[ NO IN BRANCH ]]");
+    const inner = evaluate(ast.declaration) + (ast.hasInBranch? (";" + evalBody(ast.expression, simplify, returnPrefix)) : "--[[ NO IN BRANCH ]]");
     // return simplify? (ast.hasInBranch? ("do " + inner + " end") : inner) : ("(function() " + inner + " end)()");
     return simplify? inner : ("(function() " + inner + " end)()");
 
@@ -191,9 +380,11 @@ evaluators.nullco = ast => {
     return "(" + txt + " and " + txt + "." + ast.name.value + ")"
 }
 
-evaluators.function = ast => {
+evaluators.function = (ast, name = "") => {
 
-    let txt = "function(" + ast.parameters.map(x => x.variadic? "..." : x.name.value).join(",") + ") ";
+    // console.log(ast);
+
+    let txt = "function " + emitIdentifier(name) + "(" + ast.parameters.map(x => x.variadic? "..." : x.name.value).join(",") + ") ";
 
     depth++;
 
@@ -276,7 +467,8 @@ function evaluate(ast, ...settings) {
     const f = evaluators[ast.type];
     if(f) {
         lineno++;
-        mappings[currentFile][lineno] = ast.firstToken.pos.ln;
+        if(ast.firstToken && ast.firstToken.pos && ast.firstToken.pos.ln)
+            mappings[currentFile][lineno] = ast.firstToken.pos.ln;
         return "\n" + f(ast, ...settings);
     }
     else throw "No evaluator for: " + JSON.stringify(ast, null, 2);
@@ -298,6 +490,7 @@ let currentFile;
 const emit = (ast, filename) => {
     definitions = [ ];
     currentFile = path.normalize(filename);
+    lineno = 1;
     mappings[currentFile] = { };
     let errors = ast.errors;
     errors = [ ...errors ];
@@ -322,10 +515,11 @@ const emit = (ast, filename) => {
     }
 
     if(definitions.includes("main"))
-        txt += 'main()';
-        // txt += 'main()';
+        txt += '__report_error(main)';
 
     if(definitions.length > 0) {
+        // console.log(ast.export);
+        // console.log(definitions);
         const locals = definitions.filter(x => !ast.export.map(x => x.value).includes(x));
         if(locals.length > 0) {
             txt = "local " + locals.map(x => emitIdentifier(x)).join(",") + " " + txt;
