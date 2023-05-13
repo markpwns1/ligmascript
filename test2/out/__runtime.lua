@@ -12,13 +12,21 @@ end
 function len(a) return #a end
 function nop() end
 
-function symbol() 
-    if __symbol_id then 
-        __symbol_id = __symbol_id + 1 
-    else 
-        __symbol_id = 1
+function symbol(mt) 
+    if type(mt) == "string" then return setmetatable({}, {__tostring = function() return mt end})
+    elseif mt then return setmetatable({}, mt) 
+    else return {} end
+end
+
+function box(__proto)
+    __proto.__index = function(self, k)
+        return self[k] or __proto[k]
     end
-    return __symbol_id
+    return setmetatable(__proto, {
+        __call = function(self, ...)
+            return setmetatable({...}, __proto)
+        end,
+    })
 end
 
 unset = symbol()
@@ -53,7 +61,9 @@ end
 
 function get_empty_table() return {} end
 function proto(__proto, __super)
-    __proto.__index = __proto
+    __proto.__index = function(self, k)
+        return self[k] or __proto[k]
+    end
     __proto.constructor = __proto.constructor or get_empty_table
     __proto.__proto = __proto.__proto or __proto
     __proto.__super = __proto.__super or __super

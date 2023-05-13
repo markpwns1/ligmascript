@@ -161,54 +161,46 @@ i) end end
 
 function foldl(a,v,f,i) if i == nil then i = 
 1 end 
-
-
-local n;n = 
-
-len(
-a);
-if 
-(
-n==
-0) then return 
-v else return 
+ if type(a) == "table" and #a == 0 then  return 
+v end  if type(a) == "table" then  local x = 
+a[1]  if x ~= nil then  local xs = slice(a, 2, #a, 1)   return 
 
 foldl(
-
-tail(
-a),
+xs,
 
 f(
 v,
-
-head(
-a),
+x,
 i),
 f,
 (
 i+
-1)) end end 
+1)) end  end return 
+
+error(
+"foldl: expected array",
+2) end 
 
 
 function range(a,b,step) if step == nil then step = 
 1 end 
 
 
-
+local __temp3 
 if 
 (
 b==
-(nil)) then __temp0 = 
+(nil)) then __temp3 = 
 {
 1,
-a} else __temp0 = 
+a} else __temp3 = 
 {
 a,
 b} end 
 local first;first = 
-__temp0[1] 
+__temp3[1] 
 local last;last = 
-__temp0[2] ;
+__temp3[2] ;
 if 
 (
 first==
@@ -250,12 +242,11 @@ t),
 function (kv)  
 
 
-__temp1 = 
-kv 
+
 local k;k = 
-__temp1[1] 
+kv[1] 
 local _;_ = 
-__temp1[2] ;return 
+kv[2] ;return 
 (
 
 type(
@@ -326,16 +317,17 @@ function (a,sep) if sep == nil then sep =
 "" end 
 
 
-__temp2 = 
-a 
+
 local h;h = 
-__temp2[1] 
+a[1] 
 local t;t = 
-slice(__temp2, 2, #__temp2, 1) ;return 
+slice(a, 2, #a, 1) ;return 
 
 foldl(
 t,
-h,
+(
+h or 
+""),
 function (l,r)  return 
 (
 (

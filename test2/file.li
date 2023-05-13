@@ -1,0 +1,7 @@
+
+import "monad.li"
+
+let export file_open = \path, mode -> 
+    match io.open path mode
+    | $f -> some f
+    | else -> none

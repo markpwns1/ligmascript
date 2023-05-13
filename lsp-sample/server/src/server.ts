@@ -395,6 +395,7 @@ async function validateTextDocument(textDocument: TextDocument): Promise<void> {
 	// Send the computed diagnostics to VSCode.
 	// connection.sendDiagnostics({ uri: textDocument.uri, diagnostics: diagnostics });
 	// console.log(analysisInfo.semanticTokens.length);
+	analysisInfo.semanticTokens = analysisInfo.semanticTokens.filter(x => x && x.token && x.token.pos && x.token.pos.ln != undefined && x.token.pos.col != undefined);
 	connection.sendNotification("ligmascript/semantictokenupdate", analysisInfo.semanticTokens.map(x => ({
 		type: x.type,
 		beginLn: x.token.pos.ln,

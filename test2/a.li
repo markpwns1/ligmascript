@@ -34,14 +34,27 @@ let main = ->
     
 ]
 
+-- import "monad.li"
 
-let any = \a, f -> match a 
-    | [] -> false
-    | [ $x ::: $xs ] -> f x or any xs f
-    | else -> panic!
+-- let f = \x -> match x
+--     | some :: [$x] -> print x
+--     | else -> print "none"
 
-let main = -> 
-    let a = [1, 2, 3, 4, 5] in do 
-        print $ any a (=> @ > 3) ;
-        print $ any a (=> @ > 5)
-    end
+-- let main = -> do 
+--     f (some 5) ;
+--     f none
+-- end
+
+-- import "file.li"
+-- import "serialise.li"
+
+-- let main = -> show (file_open "monad.li" "r")
+--     -- | $f -> print "file opened with contents:\n${ f:read "a" }"
+--     -- | else -> print "file not opened"
+
+let export foldl = \a, v, f, i = 1 -> match a 
+    | [] -> v
+    | [ $x ::: $xs ] -> foldl xs (f v x i) f (i + 1)
+    | else -> error "foldl: expected array" 2
+
+

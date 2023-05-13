@@ -1,0 +1,14 @@
+
+let unwrappable = {
+    .unwrap = => @ # 1
+}
+
+let export some = box unwrappable
+let export none = symbol {
+    .unwrap = => !
+}
+
+let export left = box unwrappable
+let export right = box unwrappable
+
+let export unwrap = => @:unwrap!

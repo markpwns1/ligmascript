@@ -75,99 +75,150 @@ const mtCheck = (mt, rhand) => {
     else return ""
 }
 
-const mtCheckBreakConditions = (mt, rhand) => {
-    if(mt) return [ "getmetatable(" + evaluate(rhand) + ") ~= " + evaluate(mt) ];
+const mtCheckConditions = (mt, rhand) => {
+    if(mt) return [ "getmetatable(" + evaluate(rhand) + ") == " + evaluate(mt) ];
     else return [ ];
 }
 
-evaluators.match_expression = (ast, rhand, usedVars, mt) => {
-    if(mt) {
-        // const varName = tempVarName();
-        // let toEmit = evalBody(rhand, true, setVarReturn(varName)) + " ";
-        let [varName, toEmit] = saveVar(rhand);
-        toEmit += mtCheck(mt, raw(varName));
-        toEmit += "if " + evaluate(ast.expression) + " ~= " + varName + " then break end ";
-        return toEmit;
+// returns [ varName, statements ]
+function saveVar2(rhand) {
+    if(rhand.type == "variable") {
+        return [ rhand.name, [] ];
     }
     else {
-        return "if " + evaluate(ast.expression) + " ~= " + evaluate(rhand) + " then break end ";
+        const varName = tempVarName();
+        return [varName, [ "local " + evalBody(rhand, true, setVarReturn(varName)) + " " ] ];
     }
 }
 
-evaluators.match_variable = (ast, rhand, usedVars, mt) => {
-    // const varName = tempVarName();
-    // let toEmit = evalBody(rhand, true, setVarReturn(varName)) + " ";
-    // if(ast.optional && !mt && !usedVars.has(ast.name.value)) {
-    //     const toEmit = "local " + ast.name.value + " = " + evaluate(rhand) + " ";
-    //     usedVars.add(ast.name.value);
+evaluators.match_expression = (ast, rhand, usedVars, mt) => {
+    // if(mt) {
+    //     // const varName = tempVarName();
+    //     // let toEmit = evalBody(rhand, true, setVarReturn(varName)) + " ";
+    //     let [varName, toEmit] = saveVar(rhand);
+    //     toEmit += mtCheck(mt, raw(varName));
+    //     toEmit += "if " + evaluate(ast.expression) + " ~= " + varName + " then break end ";
     //     return toEmit;
     // }
     // else {
-    //     let [varName, toEmit] = saveVar(rhand);
-    //     toEmit += mtCheck(mt, raw(varName));
-    //     toEmit += "if " + varName + " == nil";
-    //     if(usedVars.has(ast.name.value)) {
-    //         toEmit += " or " + varName + " ~= " + ast.name.value;
-    //     }
-    //     toEmit += " then break end ";
-    //     toEmit += "local " + ast.name.value + " = " + varName + " ";
-    //     usedVars.add(ast.name.value);
-    //     return toEmit;
+    //     return "if " + evaluate(ast.expression) + " ~= " + evaluate(rhand) + " then break end ";
     // }
 
-    let toEmit = "";
-    const varName = ast.name.value;
-    const userVarsHas = usedVars.has(varName);
-    const breakConditions = [ ];
-
-    if(userVarsHas) {
-        breakConditions.push(varName + " ~= " + evaluate(rhand));
+    if(mt) {
+        const [ varName, statements ] = saveVar2(rhand);
+        const conditions = mtCheckConditions(mt, raw(varName));
+        conditions.push(evaluate(ast.expression) + " == " + varName);
+        return [ statements, conditions, 0 ];
     }
     else {
-        toEmit += "local " + varName + " = " + evaluate(rhand) + " ";
+        return [ [], [ evaluate(ast.expression) + " == " + evaluate(rhand) ], 0 ];
+    }
+}
+
+const emitStatementsAndConditions = (statements, conditions) => {
+    let toEmit = "";
+    if(statements.length > 0) {
+        toEmit += statements.join(" ") + " ";
+    }
+    let e = 0;
+    if(conditions.length > 0) {
+        toEmit += "if " + conditions.join(" and ") + " then ";
+        e = 1;
+    }
+    return [ toEmit, e ];
+}
+
+evaluators.match_variable = (ast, rhand, usedVars, mt) => {
+
+    const varName = ast.name.value;
+    const userVarsHas = usedVars.has(varName);
+
+    const conditions = [ ];
+    const statements = [ ];
+
+    if(userVarsHas) {
+        conditions.push(varName + " == " + evaluate(rhand));
+    }
+    else {
+        statements.push("local " + varName + " = " + evaluate(rhand) + " ");
         usedVars.add(varName);
     }
 
     if(ast.optional) {
-        return toEmit;
+        return [ statements, conditions, 0 ];
     }
     else {
-        breakConditions.push(varName + " == nil");
+        conditions.push(varName + " ~= nil");
     }
 
-    breakConditions.push(...mtCheckBreakConditions(mt, raw(varName)));
+    conditions.push(...mtCheckConditions(mt, raw(varName)));
 
-    if(breakConditions.length > 0) {
-        toEmit += "if " + breakConditions.map(x => "(" + x + ")").join(" or ") + " then break end ";
-    }
-
-    return toEmit;
+    return [ statements, conditions, 0 ];
 }
 
 evaluators.match_array = (ast, rhand, usedVars, mt) => {
-    // const arrayVar = tempVarName();
-    // let toEmit = evalBody(rhand, true, setVarReturn(arrayVar)) + " ";
-    let [arrayVar, toEmit] = saveVar(rhand);
 
-    toEmit += mtCheck(mt, raw(arrayVar));
+    // let [arrayVar, toEmit] = saveVar(rhand);
+    const [arrayVar, statements] = saveVar2(rhand);
 
-    if(ast.tail && ast.tail.length > 0) {
-        toEmit += "if type(" + arrayVar + ") ~= \"table\" or #" + arrayVar + " < " + (ast.head.length + ast.tail.length) + " then break end ";
+    // toEmit += mtCheck(mt, raw(arrayVar));
+    const conditions = mtCheckConditions(mt, raw(arrayVar));
+
+    // if(ast.tail && ast.tail.length > 0) {
+    //     toEmit += "if type(" + arrayVar + ") ~= \"table\" or #" + arrayVar + " < " + (ast.head.length + ast.tail.length) + " then break end ";
+    // }
+    // else if(!ast.collectiveTail) {
+    //     toEmit += "if type(" + arrayVar + ") ~= \"table\" or #" + arrayVar + " ~= " + ast.head.length + " then break end ";
+    // }
+    conditions.push("type(" + arrayVar + ") == \"table\"");
+    if(ast.tail && ast.tail.length > 0) 
+        conditions.push("#" + arrayVar + " >= " + (ast.head.length + ast.tail.length));
+    else if(!ast.collectiveTail)
+        conditions.push("#" + arrayVar + " == " + ast.head.length);
+
+    if(ast.head.length + ast.tail.length == 0 && !ast.collectiveTail) {
+        return [ statements, conditions, 0 ];
     }
-    else if(!ast.collectiveTail) {
-        toEmit += "if type(" + arrayVar + ") ~= \"table\" or #" + arrayVar + " ~= " + ast.head.length + " then break end ";
-    }
+
+    let [ifStmt, ends] = emitStatementsAndConditions(statements, conditions);
+
+    const statements0 = [ ifStmt ];
+    const conditions0 = [ ];
 
     for (let i = 0; i < ast.head.length; i++) {
-        toEmit += evaluate(ast.head[i], raw(arrayVar + "[" + (i + 1) + "]"), usedVars) + " ";
+        const [ s, c, e ] = dryEvaluate(ast.head[i], raw(arrayVar + "[" + (i + 1) + "]"), usedVars);
+        statements0.push(...s);
+        conditions0.push(...c);
+        ends += e;
     }
+
     for(let i = 0; i < ast.tail.length; i++) {
-        toEmit += evaluate(ast.tail[i], raw(arrayVar + "[#" + arrayVar + " - " + (ast.tail.length - i - 1) + "]"), usedVars) + " ";
+        const [ s, c, e ] = dryEvaluate(ast.tail[i], raw(arrayVar + "[#" + arrayVar + " - " + (ast.tail.length - i - 1) + "]"), usedVars);
+        statements0.push(...s);
+        conditions0.push(...c);
+        ends += e;
     }
-    if(ast.collectiveTail) {
-        toEmit += "local " + ast.collectiveTail.name.value + " = slice(" + arrayVar + ", " + (ast.head.length + 1) + ", #" + arrayVar + ", 1) ";
+
+    if(ast.collectiveTail) {    
+        // statements0.push("local " + ast.collectiveTail.name.value + " = slice(" + arrayVar + ", " + (ast.head.length + 1) + ", #" + arrayVar + ", 1) ");
+        const [ ifStmt0, ends0 ] = emitStatementsAndConditions(statements0, conditions0);
+        const statements1 = [ ifStmt0, "local " + ast.collectiveTail.name.value + " = slice(" + arrayVar + ", " + (ast.head.length + 1) + ", #" + arrayVar + ", 1) " ];
+        ends += ends0;
+        return [ statements1, [], ends ];
     }
-    return toEmit;
+    
+    return [ statements0, conditions0, ends ];
+
+    // for (let i = 0; i < ast.head.length; i++) {
+    //     toEmit += evaluate(ast.head[i], raw(arrayVar + "[" + (i + 1) + "]"), usedVars) + " ";
+    // }
+    // for(let i = 0; i < ast.tail.length; i++) {
+    //     toEmit += evaluate(ast.tail[i], raw(arrayVar + "[#" + arrayVar + " - " + (ast.tail.length - i - 1) + "]"), usedVars) + " ";
+    // }
+    // if(ast.collectiveTail) {
+    //     toEmit += "local " + ast.collectiveTail.name.value + " = slice(" + arrayVar + ", " + (ast.head.length + 1) + ", #" + arrayVar + ", 1) ";
+    // }
+    // return toEmit;
 }
 
 const saveVar = rhand => {
@@ -176,26 +227,47 @@ const saveVar = rhand => {
     }
     else {
         const varName = tempVarName();
-        const toEmit = "local " + evalBody(rhand, true, setVarReturn(varName)) + " ";
+        const toEmit = "local " + varName + " " + evalBody(rhand, true, setVarReturn(varName)) + " ";
         return [varName, toEmit];
     }
 }
 
 evaluators.match_table = (ast, rhand, usedVars, mt) => {
-    let [tableVar, toEmit] = saveVar(rhand);
-    toEmit += mtCheck(mt, raw(tableVar));
-    toEmit += "if type(" + tableVar + ") ~= \"table\" then break end ";
+    // let [tableVar, toEmit] = saveVar(rhand);
+    // toEmit += mtCheck(mt, raw(tableVar));
+    // toEmit += "if type(" + tableVar + ") ~= \"table\" then break end ";
 
-    for(let i = 0; i < ast.elements.length; i++) {
-        const key = evaluate(ast.elements[i].key);
-        toEmit += evaluate(ast.elements[i].pattern, raw(tableVar + "[" + key + "]"), usedVars) + " ";
+    // for(let i = 0; i < ast.elements.length; i++) {
+    //     const key = evaluate(ast.elements[i].key);
+    //     toEmit += evaluate(ast.elements[i].pattern, raw(tableVar + "[" + key + "]"), usedVars) + " ";
+    // }
+
+    // return toEmit;
+
+    const [ tableVar, statements ] = saveVar2(rhand);
+    const conditions = mtCheckConditions(mt, raw(tableVar));
+    conditions.push("type(" + tableVar + ") == \"table\"");
+    
+    if(ast.elements.length == 0) {
+        return [ statements, conditions, 0 ];
     }
 
-    return toEmit;
+    let [ifStmt, ends] = emitStatementsAndConditions(statements, conditions);
+    const statements0 = [ ifStmt ];
+    const conditions0 = [ ];
+    for(let i = 0; i < ast.elements.length; i++) {
+        const key = evaluate(ast.elements[i].key);
+        const [ s, c, e ] = dryEvaluate(ast.elements[i].pattern, raw(tableVar + "[" + key + "]"), usedVars);
+        statements0.push(...s);
+        conditions0.push(...c);
+        ends += e;
+    }
+
+    return [ statements0, conditions0, ends ];
 }
 
 evaluators.match_pattern = (ast, rhand, usedVars) =>
-    evaluate(ast.pattern, rhand, usedVars, ast.metatable);
+    dryEvaluate(ast.pattern, rhand, usedVars, ast.metatable);
 
 evaluators.match = (ast, simplify, returnPrefix) => {
     let toEmit = "";
@@ -209,42 +281,93 @@ evaluators.match = (ast, simplify, returnPrefix) => {
         rhand = raw(varName);
     }
 
-    if(ast.branches.every(x => x.pattern.type == "match_expression")) {
-        for(let i = 0; i < ast.branches.length; i++) {
-            const branch = ast.branches[i];
-            toEmit += (i > 0? "else" : "") + 
-                "if " + evaluate(rhand) + " == " + evaluate(branch.pattern.expression) + 
-                (branch.conditions.map(x => " and " + evaluate(x))) + " then ";
-            toEmit += evalBody(branch.value, simplify, returnPrefix) + " ";
+    const customReturnPrefix = returnPrefix != defaultReturn;
+    const unmatched = tempVarName();
+
+    if(customReturnPrefix) {
+        toEmit += "local " + unmatched + " = true ";
+    }
+
+    let i = 0;
+    // const [fst, snd] = [ast.branches[0], ast.branches[1]];
+    // console.log(fst, snd)
+    // if(fst.pattern.pattern.type == "match_array" 
+    // && fst.pattern.pattern.head.length == 0 && fst.pattern.pattern.tail.length == 0 
+    // && !fst.pattern.pattern.collectiveTail
+    // && !fst.pattern.metatable
+    // && fst.conditions.length == 0
+    // && snd.pattern.pattern.type == "match_array" && snd.pattern.pattern.collectiveTail && !snd.pattern.metatable
+    // && snd.conditions.length == 0) {
+    //     toEmit += "if type(" + rhand.name + ") == \"table\" then ";
+    //     toEmit += "if #" + rhand.name + " == 0 then ";
+    //     toEmit += evalBody(fst.value, simplify, returnPrefix);
+    //     toEmit += " else "
+    //     for(let i = 0; i < snd.pattern.pattern.head.length; i++) {
+    //         const [ s,c,e ] = dryEvaluate(snd.pattern.pattern.head[i], raw(rhand.name + "[" + (i + 1) + "]"), new Set()) + " ";
+    //         const [ emitted ] = emitStatementsAndConditions(s, c);
+    //         toEmit += emitted;
+    //     }
+    //     toEmit += "local " + snd.collectiveTail.name.value + " = slice(" + rhand.name + ", 1, #" + rhand.name + ", 1) ";
+    //     toEmit += evalBody(snd.value, simplify, returnPrefix);
+    //     toEmit += " end end ";
+    //     i = 2;
+    // }
+
+    // const sces = [ ];
+    for(; i < ast.branches.length; i++) {
+        const branch = ast.branches[i];
+
+        const [ s, c, e ] = dryEvaluate(branch.pattern, rhand, new Set());
+        c.push(...branch.conditions.map(evaluate));
+
+        // const previous = sces[sces.length - 1];
+        // const previousConditions = previous ? previous[1] : [ ];
+
+        // // Go through the conditions of the current branch
+        // // and find the ones in common with the previous branch.
+        // // Remove the common conditions from both branches
+        // // and add them to the common conditions list.
+        // const commonConditions = [];
+        // for(let j = 0; j < c.length; j++) {
+        //     const condition = c[j];
+        //     if(previousConditions.includes(condition)) {
+        //         commonConditions.push(condition);
+        //         c.splice(j, 1);
+        //         j--;
+        //         previousConditions.splice(previousConditions.indexOf(condition), 1);
+        //     }
+        // }
+
+        if(customReturnPrefix) {
+            c.unshift(unmatched);
         }
-        toEmit += "else " + evalBody(ast.else_value, simplify, returnPrefix) + " end";
+
+        const [ code, e0 ] = emitStatementsAndConditions(s, c);
+        const e1 = e0 + e;
+        toEmit += " " + code + " ";
+        toEmit += evalBody(branch.value, simplify, returnPrefix);
+        if(customReturnPrefix) toEmit += " " + unmatched + " = false ";
+        toEmit += " end ".repeat(e1);
+    }
+
+    // emit all the SCEs
+    // for(let i = 0; i < sces.length; i++) {
+    //     const [ code, e0 ] = emitStatementsAndConditions(s, c);
+    //     const e1 = e0 + e;
+    //     toEmit += " " + code + " ";
+    //     toEmit += evalBody(branch.value, simplify, returnPrefix);
+    //     if(customReturnPrefix) toEmit += " " + unmatched + " = false ";
+    //     toEmit += " end ".repeat(e1);
+    // }
+
+    // toEmit += " end ";//.repeat(ast.branches.length);
+
+    if(customReturnPrefix) {
+        toEmit += "if " + unmatched + " then "
+        toEmit += evalBody(ast.else_value, simplify, returnPrefix) + " end ";
     }
     else {
-        let unmatched;
-        const customReturnPrefix = returnPrefix != defaultReturn;
-        if(customReturnPrefix) {
-            unmatched = tempVarName();
-            toEmit += "local " + unmatched + " = true ";
-        }
-        for(let i = 0; i < ast.branches.length; i++) {
-            toEmit += "while " + (customReturnPrefix? unmatched : "true") + " do "
-            const branch = ast.branches[i];
-            toEmit += evaluate(branch.pattern, rhand, new Set());
-            if(branch.conditions.length > 0) {
-                toEmit += " if not (" + branch.conditions.map(evaluate).join(" and ") + ") then break end ";
-            }
-            if(customReturnPrefix) {
-                toEmit += " do " + evalBody(branch.value, simplify, returnPrefix) + " end " 
-                toEmit += unmatched + " = false "
-                toEmit += "break end ";
-            }
-            else {
-                toEmit += evalBody(branch.value, simplify, returnPrefix) + " end "
-            }
-            
-        }
-        if(customReturnPrefix) toEmit += "if " + unmatched + " then "
-        toEmit += evalBody(ast.else_value, simplify, returnPrefix) + (customReturnPrefix? " end " : " ");
+        toEmit += evalBody(ast.else_value, simplify, returnPrefix);
     }
 
     return body(simplify, toEmit);
@@ -461,6 +584,15 @@ evaluators.bind = ast => "(" + evaluate(ast.left) + "):bind(" + evaluate(ast.rig
 
 evaluators.type_annotation = ast => evaluate(ast.expression);
 evaluators.assignment = ast => evaluate(ast.left) + " = " + evaluate(ast.right);
+
+function dryEvaluate(ast, ...settings) {
+    if(!ast) throw "Attempt to evaluate nothing: " + JSON.stringify(ast, null, 2);
+    const f = evaluators[ast.type];
+    if(f) {
+        return f(ast, ...settings);
+    }
+    else throw "No evaluator for: " + JSON.stringify(ast, null, 2);
+}
 
 function evaluate(ast, ...settings) {
     if(!ast) throw "Attempt to evaluate nothing: " + JSON.stringify(ast, null, 2);

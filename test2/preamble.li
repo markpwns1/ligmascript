@@ -76,10 +76,15 @@ let export foldr = \a, v, f, i = 1 ->
         | else -> f (head a) (foldr (tail a) v f (i + 1)) i
 
 -- standard left fold
-let export foldl = \a, v, f, i = 1 -> 
-    let n = len a in cases
-        | n == 0 -> v
-        | else -> foldl (tail a) (f v (head a) i) f (i + 1)
+-- let export foldl = \a, v, f, i = 1 -> 
+--     let n = len a in cases
+--         | n == 0 -> v
+--         | else -> foldl (tail a) (f v (head a) i) f (i + 1)
+
+let export foldl = \a, v, f, i = 1 -> match a 
+    | [] -> v
+    | [ $x ::: $xs ] -> foldl xs (f v x i) f (i + 1)
+    | else -> error "foldl: expected array" 2
 
 -- creates an array [ 1, 2 ... n ]
 -- has three overloads:
@@ -115,4 +120,4 @@ let export member = \a, x -> any a (\y -> y == x)
 
 set string.join = \a, sep = "" -> 
     let [ h ::: t ] = a in 
-    foldl t h (\l, r -> l .. sep .. r)
+    foldl t (h or "") (\l, r -> l .. sep .. r)

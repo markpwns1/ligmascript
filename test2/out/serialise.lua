@@ -4,12 +4,11 @@ local
 function serialise_pair(p,visited)  
 
 
-__temp3 = 
-p 
+
 local k;k = 
-__temp3[1] 
+p[1] 
 local v;v = 
-__temp3[2] ;return 
+p[2] ;return 
 string.format("%s = %s",
 
 serialise(
@@ -100,51 +99,35 @@ function serialise(x,visited) if visited == nil then visited =
 local __temp4 = 
 
 type(
-x) local __temp5 = true while __temp5 do 
-
-if 
-"nil" ~= 
-__temp4 then break end  do return 
-"nil" end __temp5 = false break end while __temp5 do 
-
-if 
-"number" ~= 
-__temp4 then break end  do return 
+x)  if 
+"nil" == 
+__temp4 then  return 
+"nil" end  if 
+"number" == 
+__temp4 then  return 
 
 tostring(
-x) end __temp5 = false break end while __temp5 do 
-
-if 
-"boolean" ~= 
-__temp4 then break end  do return 
+x) end  if 
+"boolean" == 
+__temp4 then  return 
 
 tostring(
-x) end __temp5 = false break end while __temp5 do 
-
-if 
-"string" ~= 
-__temp4 then break end  do return 
+x) end  if 
+"string" == 
+__temp4 then  return 
 string.format("\"%s\"",
-x) end __temp5 = false break end while __temp5 do 
-
-if 
-"function" ~= 
-__temp4 then break end  do return 
-"<function>" end __temp5 = false break end while __temp5 do 
-
-if 
-"CFunction" ~= 
-__temp4 then break end  do return 
-"<cfunction>" end __temp5 = false break end while __temp5 do 
-
-if 
-"userdata" ~= 
-__temp4 then break end  do return 
-"<userdata>" end __temp5 = false break end while __temp5 do 
-
-if 
-"table" ~= 
-__temp4 then break end  do 
+x) end  if 
+"function" == 
+__temp4 then  return 
+"<function>" end  if 
+"CFunction" == 
+__temp4 then  return 
+"<cfunction>" end  if 
+"userdata" == 
+__temp4 then  return 
+"<userdata>" end  if 
+"table" == 
+__temp4 then  
 if 
 
 member(
@@ -167,27 +150,25 @@ x;return
 
 serialise_object(
 x,
-visited) end end __temp5 = false break end if __temp5 then return 
+visited) end end return 
 
 panic(
-(nil)) end  end 
+(nil)) end 
 
 local 
 function show_one(x)  
 local __temp6 = 
 
 type(
-x) local __temp7 = true while __temp7 do 
-
-if 
-"table" ~= 
-__temp6 then break end  do return 
+x)  if 
+"table" == 
+__temp6 then  return 
 
 serialise_object(
 x,
 {
-x}) end __temp7 = false break end if __temp7 then return 
-x end  end 
+x}) end return 
+x end 
 
 
 function show(...) local x = {...}  return 

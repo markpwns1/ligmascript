@@ -1,55 +1,24 @@
-require("__mappings") require("__runtime") local any,main 
-
-local 
-function any(a,f)  
-while true do 
-
-if type(a) ~= "table" or #a ~= 0 then break end return 
-false end while true do 
+require("__mappings") require("__runtime") 
 
 
+function foldl(a,v,f,i) if i == nil then i = 
+1 end 
+ if type(a) == "table" and #a == 0 then  return 
+v end  if type(a) == "table" then  local x = 
+a[1]  if x ~= nil then  local xs = slice(a, 2, #a, 1)   return 
 
-local x = 
-a[1] if (x == nil) then break end  local xs = slice(a, 2, #a, 1) return 
-(
+foldl(
+xs,
 
 f(
-x) or 
-
-any(
-xs,
-f)) end return 
-
-panic(
-(nil))  end 
-
-local 
-function main()  
-
-
-local a;a = 
-{
-1,
-2,
-3,
-4,
-5};
-
-
-print(
-
-any(
-a,
-function (self)  return 
+v,
+x,
+i),
+f,
 (
-self>
-3) end));
+i+
+1)) end  end return 
 
-print(
-
-any(
-a,
-function (self)  return 
-(
-self>
-5) end)) end __report_error(main)
+error(
+"foldl: expected array",
+2) end 

@@ -92,7 +92,9 @@ const generateError = (ast, msg, warning = false) => {
 const typeOfAST = ast => {
     if(ast == null) return "variable";
     if(ast.type == "function") return "function";
-    if(ast.type == "application" && ast.f.type == "variable" && ast.f.name == "proto") return "class";
+    if(ast.type == "application" && ast.f.type == "variable") {
+        if(["proto", "getmetatable", "symbol", "box"].includes(ast.f.name)) return "class";
+    }
     return "variable";
 }
 
@@ -170,7 +172,11 @@ analyser.walkers.fstring = ast => ast.format_values.forEach(walk);
 analyser.walkers.parenthesised = ast => walk(ast.inner);
 analyser.walkers.array = ast => ast.elements.forEach(walk);
 analyser.walkers.table = ast => ast.elements.forEach(x => { walk(x.index); walk(x.value); });
-analyser.walkers.method_call = ast => { walk(ast.table); ast.args.forEach(walk); };
+analyser.walkers.method_call = ast => { 
+    addSemanticToken(ast.name, null, "function");
+    walk(ast.table); 
+    ast.args.forEach(walk); 
+};
 analyser.walkers.application = ast => { 
     if(ast.f.type == "variable") {
         addSemanticToken(ast.f.firstToken, null, "function");

@@ -1,0 +1,1 @@
+node "../index.js" "a.li" & cd "out" & lua "a.lua"
