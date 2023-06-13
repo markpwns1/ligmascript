@@ -46,10 +46,12 @@ Let's analyse this code:
 - `| else -> [ b # first ] ++ slice b (first + 1) last` - otherwise, return the same as the above, but also append the rest of the slice recursively.
 
 ## Installation
-As this is a work-in-progress and not quite ready for mass usage, you'll have to install Ligmascript by cloning the repo with `git clone "https://github.com/markpwns1/ligmascript"`. Ligmascript runs on Node, but has no dependencies, so that is the only step.
+As this is a work-in-progress and not quite ready for mass usage, you'll have to install Ligmascript by cloning the repo with `git clone "https://github.com/markpwns1/ligmascript"`. Ligmascript runs on Node, but has no dependencies, so that is the only step. In the short-term future I plan to move the project to a more lightweight Javascript engine (or whip one up myself), and in the long-term I hope to reimpliment the compiler in another language entirely. 
 
 ## Usage
 Again, as this is a work-in-progress, the command-line interface for the compiler is very minimal. To compile a file, run `node index.js <entry file> [output dir]`. Any other files in your project will automatically be compiled by analysing the `import` statements in your project. So for example, `node index.js "src/main.li" "out"` will compile `src/main.li` and generate `out/main.lua`, along with some other automatically generated files, necessary for the functioning of Ligmascript programs.
+
+There is also a VSCode extension (accidentally) packaged in this repo, which supports things like syntax highlighting, autocompletion, error reporting, etc. To run it, open "lsp-sample" in VSCode and run the project with F5 or CTRL+F5. The VSCode extension is also a heavy work-in-progress, but it's somewhat stable.
 
 ## Language
 Ligmascript's syntax and standard library are ergonomic and designed for functional programming, whereas much of Ligmascript's semantics are equivalent to Lua.
