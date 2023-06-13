@@ -611,6 +611,7 @@ let a = match vec3 2 3 4
 	| vec2 :: { $x, $y } -> x + y
 	| vec3 :: { $x, $y, $z } -> x + y + z
 	| else -> panic!
+```
 
 ### Language Example
 Here is the source code of `serialise.li` as of 2023-06-13
