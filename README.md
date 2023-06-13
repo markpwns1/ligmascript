@@ -2,6 +2,8 @@
 
 ## Warning: LIGMAScript is currently a Work-in-Progress - Use at your own risk!
 
+![The Ligmascript VSCode Extension](https://markpwns1.github.io/images/ligma0.png)
+
 Ligmascript is a dynamically-typed impure functional language that transpiles to Lua, built with practicality and interoperability with Lua codebases in mind. Ligmascript is exactly the kind of toolset that makes functional programming in Lua as seamless and practical as possible.
 
 LIGMA stands for Lua-Interoperable General Machine Abstraction.
