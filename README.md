@@ -91,9 +91,9 @@ You can declare variables using `let ... = ... [in ...]`
 For example,
 ```
 let x = 
-	let y = 3 in
-	let z = 4 in
-	y + z
+    let y = 3 in
+    let z = 4 in
+    y + z
 --
 local y = 3
 local z = 4
@@ -118,7 +118,7 @@ Ligmascript has an `if` expression and a `cases` expression. The `if` expression
 let f = \x -> if x == 1 then 0 else 1
 --
 local function f(x)
-	if x == 1 then return 0 else return 1 end
+    if x == 1 then return 0 else return 1 end
 end
 ```
 The `else` branch is optional.
@@ -126,14 +126,14 @@ The `else` branch is optional.
 The `cases` statement is identical to an `if-elseif-elseif-else` statement. The `else` branch is mandatory.
 ```
 let f = \x -> cases
-	| x == 1 -> 2
-	| x == 2 -> 3
-	| else -> 4
+    | x == 1 -> 2
+    | x == 2 -> 3
+    | else -> 4
 --
 local function f(x)
-	if x == 1 then return 2 
-	elseif x == 2 then return 3
-	else return 4 end
+    if x == 1 then return 2 
+    elseif x == 2 then return 3
+    else return 4 end
 end
 ```
 
@@ -195,15 +195,15 @@ Some useful list-related functions:
 Tables in Ligmascript are similar to those in Lua. Once again, commas are interchangeable with semicolons. Trailing semicolons/commas are allowed.
 ```
 let t = {
-	.x = 1,
-	.y = 2,
-	.z = 3
+    .x = 1,
+    .y = 2,
+    .z = 3
 }
 --
 local t = {
-	x = 1,
-	y = 2,
-	z = 3
+    x = 1,
+    y = 2,
+    z = 3
 }
 ```
 
@@ -211,14 +211,14 @@ To use an arbitrary value as a key in the table, use `#` instead of `.`
 ```
 let x = "hello"
 let t = {
-	#x = 1,
-	#2 + 3 = "foo"
+    #x = 1,
+    #2 + 3 = "foo"
 }
 --
 local x = "hello"
 local t = {
-	[x] = 1,
-	[2 + 3] = "foo"
+    [x] = 1,
+    [2 + 3] = "foo"
 }
 ```
 
@@ -250,11 +250,11 @@ let x = t?.a?.b?.c?.d -- x = nil
 --
 local t = { a = { b = { } } }
 local x = (function()
-	if t and t.a and t.a.b and t.a.b.c then
-		return t.a.b.c.d
-	else
-		return nil
-	end
+    if t and t.a and t.a.b and t.a.b.c then
+        return t.a.b.c.d
+    else
+        return nil
+    end
 end)()
 ```
 
@@ -268,8 +268,8 @@ Some useful table functions:
 Tables can be destructured using any the following syntaxes, and of course you can mix and match the different syntaxes:
 ```
 let player = {
-	.health = 1;
-	.pos = { .x = 1, .y = 2 };
+    .health = 1;
+    .pos = { .x = 1, .y = 2 };
 }
 
 let { .health, .pos = { .x, .y } } = player
@@ -278,8 +278,8 @@ let { .health = hp, .pos = { .x = player_x, .y = y_position } } = player
 let { #"hea" .. "lth" = hp, #"po" .. "s" = { #string.trim " x " = xpos, .y } } = player
 --
 local player = {
-	health = 1,
-	pos = { x = 1, y = 2 }
+    health = 1,
+    pos = { x = 1, y = 2 }
 }
 
 local health = player.health
@@ -301,7 +301,7 @@ Functions are defined like so:
 \a, b, c -> a + b + c
 --
 function (a, b, c) 
-	return a + b + c 
+    return a + b + c 
 end
 ```
 
@@ -310,7 +310,7 @@ All functions are anonymous, so in order to declare a function in the global sco
 let f = \x -> x
 ---
 local function f(x)
-	return x
+    return x
 end
 ```
 
@@ -333,7 +333,7 @@ function f() return print("Hello world!") end
 let main = -> print "Hello world!"
 ---
 local function main()
-	print("Hello world!")
+    print("Hello world!")
 end
 main()
 ```
@@ -345,11 +345,11 @@ let f = \x = 5 -> x
 let main = -> print (f 3 + f ()) -- prints 8
 --
 local function f(x)
-	if x == nil then x = 5 end
-	return x
+    if x == nil then x = 5 end
+    return x
 end
 local function main()
-	print(f(3) + f())
+    print(f(3) + f())
 end
 main()
 ```
@@ -362,12 +362,12 @@ let add_one_to_all = \x... = [ 1, 2, 3 ] -> map x (\y -> y + 1)
 let main = -> show (add_one_to_all 5 4 3 2 1)
 --
 local function add_one_to_all(...)
-	local x = {...}
-	if #x == 0 then x = { 1, 2, 3 }
-	return map(x, function(y) return y + 1 end)
+    local x = {...}
+    if #x == 0 then x = { 1, 2, 3 }
+    return map(x, function(y) return y + 1 end)
 end
 local function main()
-	return show (add_one_to_all(5, 4, 3, 2, 1))
+    return show (add_one_to_all(5, 4, 3, 2, 1))
 end
 main()
 ```
@@ -380,10 +380,10 @@ let f = \x, y -> x + y
 let f = \y => self + y
 --
 local function f(x, y)
-	return x + y
+    return x + y
 end
 local function f(self, y)
-	return self + y
+    return self + y
 end
 ```
 
@@ -395,13 +395,13 @@ let f = => self + 1
 let f = => @ + 1
 --
 local function f(x)
-	return x + 1
+    return x + 1
 end
 local function f(self)
-	return self + 1
+    return self + 1
 end
 local function f(self)
-	return self + 1
+    return self + 1
 end
 ```
 
@@ -418,10 +418,10 @@ let add_vector_components = => @x + @y
 let main = -> print (add_vector_components { .x = 1, .y = 2 })
 --
 local function add_vector_components(self)
-	return self.x + self.y
+    return self.x + self.y
 end
 local function main()
-	return print(add_vector_components({ x = 1, y = 2 }))
+    return print(add_vector_components({ x = 1, y = 2 }))
 end
 main()
 ```
@@ -430,10 +430,10 @@ main()
 Finally, the result of all this is something that resembles methods:
 ```
 let v = {
-	.x = 3,
-	.y = 4,
-	.length = => math.sqrt (@x * @x + @y * @y),
-	.to_string = => "(${@x}, ${@y})"
+    .x = 3,
+    .y = 4,
+    .length = => math.sqrt (@x * @x + @y * @y),
+    .to_string = => "(${@x}, ${@y})"
 }
 ```
 
@@ -453,10 +453,10 @@ Using a `:` instead of a `.` before a function call will pass the object precedi
 Finally, here is the formalised version of structs/classes/data types or what have you, in Ligmascript. Prototypes are a way to create an object with shared methods or fields. Follow the example below:
 ```
 let vec2 = proto {
-	.constructor = \x, y -> { .x, .y },
-	.length = => math.sqrt (@x * @x + @y * @y),
-	.to_string = => "(${@x}, ${@y})",
-	.foo = "bar!"
+    .constructor = \x, y -> { .x, .y },
+    .length = => math.sqrt (@x * @x + @y * @y),
+    .to_string = => "(${@x}, ${@y})",
+    .foo = "bar!"
 }
 
 -- prints "(5, 6)"
@@ -478,9 +478,9 @@ With simple matching like this, value types will match by value, and tables will
 ```
 let z = "hello world"
 let x = match "hello world"
-	| 32 -> "A"
-	| z -> "B"
-	| else -> "C"
+    | 32 -> "A"
+    | z -> "B"
+    | else -> "C"
 
 -- x = "B"
 ```
@@ -489,21 +489,21 @@ let x = match "hello world"
 You can structurally match against tables. Note that you can put pretty much any valid table here and it'll match against it by value. 
 ```
 let x = match y 
-	| { -- example of a valid table that will match by value
-		#(1 + 2) = 1, 
-		.b = true, 
-		.c = { 
-			.m = "gello", 
-			.n = 4 
-		} 
-	} -> "A"
-	| else -> "B"
+    | { -- example of a valid table that will match by value
+        #(1 + 2) = 1, 
+        .b = true, 
+        .c = { 
+            .m = "gello", 
+            .n = 4 
+        } 
+    } -> "A"
+    | else -> "B"
 ```
 Note that table matches **only check if every value matches in a table, and will not reject tables with more fields**. For example, the following will match:
 ```
 let a = match { .x = 1, .y = 2, .z = 3 }
-	| { .x = 1 } -> "Match!"
-	| else -> panic!
+    | { .x = 1 } -> "Match!"
+    | else -> panic!
 
 -- a = "Match!"
 ```
@@ -512,8 +512,8 @@ let a = match { .x = 1, .y = 2, .z = 3 }
 Match variables must be preceded with a `$`. Any value besides `nil` will satisfy a match variable. 
 ```
 let x = match { .a = 1, .b = 2 }
-	| { .a = $n, .b = $m } -> n + m
-	| else -> 0
+    | { .a = $n, .b = $m } -> n + m
+    | else -> 0
 
 -- x = 3
 ```
@@ -521,8 +521,8 @@ let x = match { .a = 1, .b = 2 }
 A shortcut for `.x = $x` is simply `$x`, so the above could also be written as:
 ```
 let x = match { .a = 1, .b = 2 }
-	| { $a, $b } -> a + b
-	| else -> 0
+    | { $a, $b } -> a + b
+    | else -> 0
 
 -- x = 3
 ```
@@ -530,8 +530,8 @@ let x = match { .a = 1, .b = 2 }
 If you append `?` to the variable, it declares it optional. That means that `nil` will also satisfy the pattern.
 ```
 let x = match { .a = 1 }
-	| { $a, $b? } -> a + (b or 0)
-	| else -> 0
+    | { $a, $b? } -> a + (b or 0)
+    | else -> 0
 
 -- x = 1
 ```
@@ -539,9 +539,9 @@ let x = match { .a = 1 }
 Variables will be unified (by reference if possible) and any failure to unify will reject the pattern.
 ```
 let x = match { .a = 1, .b = 1, .c = 2 }
-	| { .a = $y, .b = $y, .c = $y } -> y * 3
-	| { .a = $y, .b = $y } -> y * 2
-	| else -> 0
+    | { .a = $y, .b = $y, .c = $y } -> y * 3
+    | { .a = $y, .b = $y } -> y * 2
+    | else -> 0
 
 -- x = 2 (2nd branch matches)
 ```
@@ -550,24 +550,24 @@ let x = match { .a = 1, .b = 1, .c = 2 }
 You can also structurally match against arrays, while also using any other feature of the pattern matching system
 ```
 let x = match [ 1, 2, 3 ]
-	| [ $x, $y, $z ] -> x + y + z
-	| else -> 0
+    | [ $x, $y, $z ] -> x + y + z
+    | else -> 0
 ```
 
 Ligmascript also supports matching the beginnings and ends of arrays
 ```
 let x = match [ 1, 2, 3, 4, 5 ]
-	| [ 10, 11... ] -> 21
-	| [ ... 8, 9 ] -> 17
-	| [ $a, $b ... $c, $d ] -> a + b + c + d
-	| else -> 0
+    | [ 10, 11... ] -> 21
+    | [ ... 8, 9 ] -> 17
+    | [ $a, $b ... $c, $d ] -> a + b + c + d
+    | else -> 0
 ```
 
 Ligmascript also supports head-tail array matching, as is standard in functional languages.
 ```
 let x = match [ 1, 2, 3, 4, 5 ]
-	| [ $a, $b ::: $xs ] -> a + b + len xs
-	| else -> 0
+    | [ $a, $b ::: $xs ] -> a + b + len xs
+    | else -> 0
 
 -- x = 6
 ```
@@ -576,23 +576,23 @@ let x = match [ 1, 2, 3, 4, 5 ]
 You can match against multiple patterns as a kind of "or statement".
 ```
 let x = match y
-	| { .x = $a } | { .y = $a } -> a
-	| else -> 0
+    | { .x = $a } | { .y = $a } -> a
+    | else -> 0
 ```
 Note that Ligmascript is whitespace insensitive, so this could also be written like so:
 ```
 let x = match y
-	| { .x = $a } 
-	| { .y = $a } -> a
-	| else -> 0
+    | { .x = $a } 
+    | { .y = $a } -> a
+    | else -> 0
 ```
 
 #### Arbitrary Branch Conditions
 You can insert one or more arbitrary conditions at the end of a branch by using a comma:
 ```
 let x = match y
-	| { $a }, a ~= 4, a * a > a -> "Match!"
-	| else -> "No match!"
+    | { $a }, a ~= 4, a * a > a -> "Match!"
+    | else -> "No match!"
 ```
 Note that in combination with union matches, you can have conditions on each distinct pattern in the union.
 
@@ -600,17 +600,17 @@ Note that in combination with union matches, you can have conditions on each dis
 You can also match against an object's metatable. This is useful when working with prototypes.
 ```
 let vec2 = proto {
-	.constructor = \x, y -> { .x, .y }
+    .constructor = \x, y -> { .x, .y }
 }
 
 let vec3 = proto {
-	.constructor = \x, y -> { .x, .y, .z }
+    .constructor = \x, y -> { .x, .y, .z }
 }
 
 let a = match vec3 2 3 4
-	| vec2 :: { $x, $y } -> x + y
-	| vec3 :: { $x, $y, $z } -> x + y + z
-	| else -> panic!
+    | vec2 :: { $x, $y } -> x + y
+    | vec3 :: { $x, $y, $z } -> x + y + z
+    | else -> panic!
 ```
 
 ### Language Example
