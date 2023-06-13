@@ -13,7 +13,7 @@ let serialise_object = \x, visited ->
     let obj = cases
         | is_array x -> "[ ${string.join (map x \x -> serialise x visited) ", " } ]"
         | (getmetatable x)?.__tostring -> tostring x
-        | else -> serialise_table x visited
+        | else -> serialise_table x visited 
     in "(${tostring x}) ${obj}"
 
 let export serialise = \x, visited = [] -> match type x

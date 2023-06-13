@@ -19,37 +19,37 @@ LIGMA stands for Lua-Interoperable General Machine Abstraction.
 - In addition, a VSCode extension and language server (experimental)
 
 ### Table of Contents
-1. [Sample](##Sample)
-2. [Installation](##Installation)
-3. [Usage](##Usage)
-4. [Language](##Language)
-5. [Example](##Example)
-6. [The "How & Why" of Ligmascript](##How & Why)
+1. [Sample](#sample)
+2. [Installation](#installation)
+3. [Usage](#usage)
+4. [Language](#language)
+5. [Example](#example)
+6. [The "How & Why" of Ligmascript](#how--why)
 
 ## Sample
 Here is a sample of the slice function, taken from `preamble.li`:
 ```lua
 -- copies a slice of an array starting from "first" to optionally "last"
 let export slice = \b, first, last = len b -> cases
-    | type b == "string", string.sub b first last
-    | else, cases
-        | first >= last, [ b #first ]
-        | else, [ b #first ] ++ slice b (first + 1) last
+    | type b == "string" -> string.sub b first last
+    | else -> cases
+        | first >= last -> [ b #first ]
+        | else -> [ b #first ] ++ slice b (first + 1) last
 ```
 
 Let's analyse this code:
 - `let export slice = ...` - declares a variable named `slice` that is accessible from other files
 - `\b, first, last = len b -> ...` - defines an anonymous function with three arguments, `b`, `first`, and `last`, with `last` having a default value of `len b` (length of `b`), should the user omit `last` when calling the function.
-- `cases | type b == "string", ... | else, ...` - checks whether the type of `b` is a string. This line could have just as easily been an if-statement.
+- `cases | type b == "string" -> ... | else -> ...` - checks whether the type of `b` is a string. This line could have just as easily been an if-statement.
 - `string.sub b first last` - equivalent to Lua's `string.sub(b, first, last)`
-- `cases | first >= last, [ b # first ]` - if `first >= last`, return a list with only one element, which is the element of `b` at index `first`. `x # y` is equivalent to Lua's indexing syntax `x[y]`.
-- `| else, [ b # first ] ++ slice b (first + 1) last` - otherwise, return the same as the above, but also append the rest of the slice recursively.
+- `cases | first >= last -> [ b # first ]` - if `first >= last`, return a list with only one element, which is the element of `b` at index `first`. `x # y` is equivalent to Lua's indexing syntax `x[y]`.
+- `| else -> [ b # first ] ++ slice b (first + 1) last` - otherwise, return the same as the above, but also append the rest of the slice recursively.
 
 ## Installation
-TODO: write this
+As this is a work-in-progress and not quite ready for mass usage, you'll have to install Ligmascript by cloning the repo with `git clone "https://github.com/markpwns1/ligmascript"`. Ligmascript runs on Node, but has no dependencies, so that is the only step.
 
 ## Usage
-TODO: write this
+Again, as this is a work-in-progress, the command-line interface for the compiler is very minimal. To compile a file, run `node index.js <entry file> [output dir]`. Any other files in your project will automatically be compiled by analysing the `import` statements in your project. So for example, `node index.js "src/main.li" "out"` will compile `src/main.li` and generate `out/main.lua`, along with some other automatically generated files, necessary for the functioning of Ligmascript programs.
 
 ## Language
 Ligmascript's syntax and standard library are ergonomic and designed for functional programming, whereas much of Ligmascript's semantics are equivalent to Lua.
@@ -470,41 +470,189 @@ let v = vec2 5 6
 ```
 If you were to inspect the contents of `v`, you would only find `.x = 5` and `.y = 6`. Yet if you were to access `v.foo`, you would indeed get `"bar!"` because even though `foo` wasn't found in `v`, it was found in `v`'s prototype.
 
-### Example
-Here is the source code of `serialise.li` as of 2023-04-16
+### Pattern Matching
+Ligmascript has an extremely powerful pattern matching system.
+
+#### Simple Matching
+With simple matching like this, value types will match by value, and tables will match by reference
 ```
+let z = "hello world"
+let x = match "hello world"
+	| 32 -> "A"
+	| z -> "B"
+	| else -> "C"
+
+-- x = "B"
+```
+
+#### Table Matching 
+You can structurally match against tables. Note that you can put pretty much any valid table here and it'll match against it by value. 
+```
+let x = match y 
+	| { -- example of a valid table that will match by value
+		#(1 + 2) = 1, 
+		.b = true, 
+		.c = { 
+			.m = "gello", 
+			.n = 4 
+		} 
+	} -> "A"
+	| else -> "B"
+```
+Note that table matches **only check if every value matches in a table, and will not reject tables with more fields**. For example, the following will match:
+```
+let a = match { .x = 1, .y = 2, .z = 3 }
+	| { .x = 1 } -> "Match!"
+	| else -> panic!
+
+-- a = "Match!"
+```
+
+#### Match Variables
+Match variables must be preceded with a `$`. Any value besides `nil` will satisfy a match variable. 
+```
+let x = match { .a = 1, .b = 2 }
+	| { .a = $n, .b = $m } -> n + m
+	| else -> 0
+
+-- x = 3
+```
+
+A shortcut for `.x = $x` is simply `$x`, so the above could also be written as:
+```
+let x = match { .a = 1, .b = 2 }
+	| { $a, $b } -> a + b
+	| else -> 0
+
+-- x = 3
+```
+
+If you append `?` to the variable, it declares it optional. That means that `nil` will also satisfy the pattern.
+```
+let x = match { .a = 1 }
+	| { $a, $b? } -> a + (b or 0)
+	| else -> 0
+
+-- x = 1
+```
+
+Variables will be unified (by reference if possible) and any failure to unify will reject the pattern.
+```
+let x = match { .a = 1, .b = 1, .c = 2 }
+	| { .a = $y, .b = $y, .c = $y } -> y * 3
+	| { .a = $y, .b = $y } -> y * 2
+	| else -> 0
+
+-- x = 2 (2nd branch matches)
+```
+
+#### Array Matches
+You can also structurally match against arrays, while also using any other feature of the pattern matching system
+```
+let x = match [ 1, 2, 3 ]
+	| [ $x, $y, $z ] -> x + y + z
+	| else -> 0
+```
+
+Ligmascript also supports matching the beginnings and ends of arrays
+```
+let x = match [ 1, 2, 3, 4, 5 ]
+	| [ 10, 11... ] -> 21
+	| [ ... 8, 9 ] -> 17
+	| [ $a, $b ... $c, $d ] -> a + b + c + d
+	| else -> 0
+```
+
+Ligmascript also supports head-tail array matching, as is standard in functional languages.
+```
+let x = match [ 1, 2, 3, 4, 5 ]
+	| [ $a, $b ::: $xs ] -> a + b + len xs
+	| else -> 0
+
+-- x = 6
+```
+
+#### Union Matches
+You can match against multiple patterns as a kind of "or statement".
+```
+let x = match y
+	| { .x = $a } | { .y = $a } -> a
+	| else -> 0
+```
+Note that Ligmascript is whitespace insensitive, so this could also be written like so:
+```
+let x = match y
+	| { .x = $a } 
+	| { .y = $a } -> a
+	| else -> 0
+```
+
+#### Arbitrary Branch Conditions
+You can insert one or more arbitrary conditions at the end of a branch by using a comma:
+```
+let x = match y
+	| { $a }, a ~= 4, a * a > a -> "Match!"
+	| else -> "No match!"
+```
+Note that in combination with union matches, you can have conditions on each distinct pattern in the union.
+
+#### Metatable Matches
+You can also match against an object's metatable. This is useful when working with prototypes.
+```
+let vec2 = proto {
+	.constructor = \x, y -> { .x, .y }
+}
+
+let vec3 = proto {
+	.constructor = \x, y -> { .x, .y, .z }
+}
+
+let a = match vec3 2 3 4
+	| vec2 :: { $x, $y } -> x + y
+	| vec3 :: { $x, $y, $z } -> x + y + z
+	| else -> panic!
+
+### Language Example
+Here is the source code of `serialise.li` as of 2023-06-13
+```
+
 import "preamble.li"
 
-let serialise_pair = \p ->
-    let [ k, v ] = p in "${serialise k} = ${serialise v}"
+let serialise_pair = \p, visited -> 
+    let [ k, v ] = p in "${serialise k visited} = ${serialise v visited}"
 
-let serialise_table = \t ->
-    let [ p, n ] = [ pairset t, len p ] in cases
-	    | n == 0, "{}"
-	    | else, "{ ${string.join (map p serialise_pair) ", " } }"
+let serialise_table = \t, visited -> 
+    let [ p, n ] = [ pairset t, len p ] in cases
+    | n == 0 -> "{}"
+    | else -> "{ ${string.join (map p \x -> serialise_pair x visited) ", " } }"
 
-let serialise_object = \x -> cases
-    | is_array x, "[ ${string.join (map x serialise) ", " } ]"
-    | (getmetatable x)?.__tostring, tostring x
-    | else, serialise_table x
+let serialise_object = \x, visited -> 
+    let obj = cases
+        | is_array x -> "[ ${string.join (map x \x -> serialise x visited) ", " } ]"
+        | (getmetatable x)?.__tostring -> tostring x
+        | else -> serialise_table x visited
+    in "(${tostring x}) ${obj}"
 
-let export serialise = \x -> match type x
-    | "nil", "nil"
-    | "number", tostring x
-    | "string", "\"${x}\""
-    | "boolean", tostring x
-    | "function", "function"
-    | "CFunction", "cfunction"
-    | "userdata", "userdata"
-    | "table", serialise_object x
-    | else, panic!
+let export serialise = \x, visited = [] -> match type x
+    | "nil" -> "nil"
+    | "number" | "boolean" -> tostring x
+    | "string" -> "\"${x}\""
+    | "function" -> "<function>"
+    | "CFunction" -> "<cfunction>"
+    | "userdata" -> "<userdata>"
+    | "table" -> 
+        if member visited x 
+        then "(recursive) (${tostring x})"
+        else do set visited #(len visited + 1) = x
+        then serialise_object x visited
+    | else -> panic!
+        
+let show_one = \x -> match type x 
+    | "table" -> serialise_object x [x]
+    | else -> x
 
-let show_one = \x -> match type x
-    | "table", serialise_object x
-    | else, x
-
-let export show = \x... ->
-    print (... map x show_one)
+let export show = \x... -> 
+    print (... map x show_one)
 ```
 
 ## How & Why
